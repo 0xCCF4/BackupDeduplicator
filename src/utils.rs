@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::rc::{Rc};
 use crate::data::common::{FileContainer, GeneralHash};
 use anyhow::{anyhow, Result};
@@ -43,7 +43,7 @@ where T: std::io::Read {
         if bytes_read == 0 {
             break;
         }
-        hasher.update(&buffer[..bytes_read]);
+        Digest::update(&mut hasher, &buffer[..bytes_read]);
     }
 
     *hash = match hash {
@@ -64,7 +64,7 @@ pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileCont
         content_size += 1;
         match child.borrow().deref() {
             FileContainer::InMemory(file) => {
-                hasher.update(file.get_content_hash().as_bytes());
+                Digest::update(&mut hasher, file.get_content_hash().as_bytes());
             },
             FileContainer::OnDisk(_) => {
                 Err(anyhow!("Hashing of unloaded file is not supported."))?
@@ -82,3 +82,16 @@ pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileCont
     Ok(content_size)
 }
 
+pub fn hash_path(path: &Path, hash: &mut GeneralHash) -> Result<()> {
+    let mut hasher = match hash {
+        GeneralHash::SHA256(_) => sha2::Sha256::new(),
+    };
+
+    Digest::update(&mut hasher, path.as_os_str().as_encoded_bytes());
+
+    *hash = match hash {
+        GeneralHash::SHA256(_) => GeneralHash::SHA256(hasher.finalize().into()),
+    };
+
+    Ok(())
+}
