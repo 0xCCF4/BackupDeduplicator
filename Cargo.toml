@@ -1,0 +1,25 @@
+[package]
+name = "backup-deduplicator"
+version = "0.1.0"
+edition = "2021"
+description = """
+A tool to deduplicate backups. It builds a hash tree of all files and folders
+in the target directory. Optionally also traversing into archives like zip or
+tar files. The hash tree is then used to find duplicate files and folders."""
+readme = "README.md"
+keywords = ["archive-management", "file", "deduplication", "cleanup"]
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/0xCCF4/BackupDeduplicator"
+repository = "https://github.com/0xCCF4/BackupDeduplicator"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.80"
+clap = { version = "4.5.1", features = ["derive"] }
+env_logger = "0.11.2"
+log = "0.4.20"
+filetime = "0.2.23"
+exitcode = "1.1.2"
+same-file = "1.0.6"
+sha2 = "0.10.8"
