@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::ops::{DerefMut};
 use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use crate::data::common::{File, FileContainer, HandleIdentifier};
@@ -17,11 +19,8 @@ pub fn run(
     let inside_scope = |path: &'_ Path| -> bool { true };
     let lookup_id = |id: &'_ HandleIdentifier| -> Result<_, _> { Err(anyhow!("lookup_id")) };
 
-    let mut root = File::new(build_settings.directory, false, inside_scope, lookup_id);
-    if let(File::Directory(ref mut dir)) = root {
-        dir.analyze_expand(false, inside_scope, lookup_id);
-    }
-    let mut root = FileContainer::InMemory(root);
+    let root = File::new(build_settings.directory, false, inside_scope, lookup_id);
+    let mut root = FileContainer::InMemory(RefCell::new(root));
 
     analyze_file(&mut root);
 
@@ -35,20 +34,34 @@ fn analyze_file(file: &mut FileContainer) {
     let inside_scope = |path: &'_ Path| -> bool { true };
     let lookup_id = |id: &'_ HandleIdentifier| -> Result<_, _> { Err(anyhow!("lookup_id")) };
 
-    if let FileContainer::InMemory(ref mut file) = file {
-        if let File::Directory(ref mut dir) = file {
-            dir.analyze_expand(false, inside_scope, lookup_id);
-            // go through children
-            for child in dir.children.iter() {
-                let mut borrow = child.borrow_mut();
-                analyze_file(&mut borrow);
+    match file {
+        FileContainer::InMemory(ref mut file) => {
+            let mut file_borrow = file.borrow_mut();
+            match file_borrow.deref_mut() {
+                File::Directory(ref mut dir) => {
+                    dir.analyze_expand(true, inside_scope, lookup_id);
+                    // go through children
+                    for child in dir.children.iter() {
+                        let mut borrow = child.borrow_mut();
+                        analyze_file(&mut borrow);
+                    }
+                    dir.analyze_collect();
+                },
+                File::File(ref mut file) => {
+                    file.analyze();
+                },
+                File::Other(_) => { /* no analysis needed */ },
+                File::Symlink(ref mut file) => {
+                    file.analyze(lookup_id);
+                }
             }
-            dir.analyze_collect();
-        }
-        if let File::File(ref mut file) = file {
-            file.analyze();
-        }
+        },
+        FileContainer::OnDisk(_) => {
+            panic!("analyze_file: on disk file");
+        },
+        FileContainer::DoesNotExist => {
+            panic!("analyze_file: does not exist");
+        },
     }
-
 
 }

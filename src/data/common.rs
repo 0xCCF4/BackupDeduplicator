@@ -1,5 +1,6 @@
 use std::cell::{RefCell};
 use std::fs;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::time::SystemTime;
@@ -118,16 +119,22 @@ pub struct SymlinkInformation {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct OtherInformation {
+    pub path: PathBuf,
+}
+
+
+#[derive(Debug, Clone, Serialize)]
 pub enum File {
     File(FileInformation),
     Directory(DirectoryInformation),
     Symlink(SymlinkInformation),
-    Other, // for unsupported file types like block devices, character devices, etc.
+    Other(OtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub enum FileContainer {
-    InMemory(File),
+    InMemory(RefCell<File>),
     OnDisk(HandleIdentifier),
     DoesNotExist, // e.g. if symlink points to a non-existing file
 }
@@ -140,7 +147,7 @@ impl File {
             File::File(info) => &info.id,
             File::Directory(info) => &info.id,
             File::Symlink(info) => &info.id,
-            File::Other => &NULL_HANDLE,
+            File::Other(_) => &NULL_HANDLE,
         }
     }
 
@@ -149,7 +156,7 @@ impl File {
             File::File(info) => matches!(info.state, FileState::Analyzed | FileState::Error),
             File::Directory(info) => matches!(info.state, DirectoryState::Analyzed | DirectoryState::Error),
             File::Symlink(info) => matches!(info.state, SymlinkState::Analyzed | SymlinkState::Error),
-            File::Other => true,
+            File::Other(_) => true,
         }
     }
 
@@ -158,38 +165,52 @@ impl File {
             File::File(info) => &info.content_hash,
             File::Directory(info) => &info.content_hash,
             File::Symlink(info) => &info.content_hash,
-            File::Other => &NULL_HASH_SHA256,
+            File::Other(_) => &NULL_HASH_SHA256,
         }
     }
 }
 
 impl FileContainer {
-    pub fn id(&self) -> Option<&HandleIdentifier> {
+    #[deprecated]
+    pub fn id(&self) -> Option<HandleIdentifier> {
         match self {
-            FileContainer::InMemory(file) => Some(file.id()),
-            FileContainer::OnDisk(id) => Some(id),
+            FileContainer::InMemory(file) => Some(file.borrow().id().clone()),
+            FileContainer::OnDisk(id) => Some(id.clone()),
             FileContainer::DoesNotExist => None,
         }
     }
 
     pub fn has_finished_analyzing(&self) -> bool {
         match self {
-            FileContainer::InMemory(file) => file.has_finished_analyzing(),
+            FileContainer::InMemory(file) => file.borrow().has_finished_analyzing(),
             FileContainer::OnDisk(_) => true, // files loaded out of memory are assumed to be fully processed
             FileContainer::DoesNotExist => true,
+        }
+    }
+
+    pub fn has_errored(&self) -> bool {
+        match self {
+            FileContainer::InMemory(file) => match file.borrow().deref() {
+                File::File(info) => matches!(info.state, FileState::Error),
+                File::Directory(info) => matches!(info.state, DirectoryState::Error),
+                File::Symlink(info) => matches!(info.state, SymlinkState::Error),
+                File::Other(_) => false,
+            },
+            FileContainer::OnDisk(_) => false, // files loaded out of memory are assumed to be fully processed
+            FileContainer::DoesNotExist => false,
         }
     }
 }
 
 impl File {
     pub fn new(path: PathBuf, follow_symlinks: bool, inside_scope: PathInScopeFn, lookup_id: ResolveNodeFn) -> Self {
-        let metadata_result = fs::metadata(&path);
+        let metadata_result = fs::symlink_metadata(&path);
         let metadata ;
         match metadata_result {
             Ok(meta) => metadata = meta,
             Err(err) => {
-                error!("Error while reading metadata {:?}: {:?}", path, err);
-                return Self::Other;
+                warn!("Error while reading metadata {:?}: {}", path, err);
+                return Self::Other(OtherInformation { path });
             }
         }
         let handle_result = same_file::Handle::from_path(&path);
@@ -197,8 +218,8 @@ impl File {
         match handle_result {
             Ok(h) => handle = h,
             Err(err) => {
-                error!("Error while reading handle {:?}: {:?}", path, err);
-                return Self::Other;
+                warn!("Error while reading handle {:?}: {}", path, err);
+                return Self::Other(OtherInformation { path });
             }
         }
 
@@ -221,7 +242,7 @@ impl File {
         match modified_result {
             Ok(time) => modified = time,
             Err(err) => {
-                error!("Error while processing file {:?}: {:?}", path, err);
+                error!("Error while processing file {:?}: {}", path, err);
                 error = true;
                 modified = 0;
             }
@@ -231,7 +252,7 @@ impl File {
             let target_link_result = fs::read_link(&path);
             match target_link_result {
                 Err(err) => {
-                    error!("Error while reading symlink {:?}: {:?}", path, err);
+                    error!("Error while reading symlink {:?}: {}", path, err);
                     return Self::Symlink(SymlinkInformation {
                         id: HandleIdentifier {
                             inode,
@@ -261,7 +282,7 @@ impl File {
                                 target_drive = handle.dev();
                             },
                             Err(err) => {
-                                error!("Error while reading symlink target {:?}: {:?}", path, err);
+                                error!("Error while reading symlink target {:?}: {}", path, err);
                                 return Self::Symlink(SymlinkInformation {
                                     id: HandleIdentifier {
                                         inode,
@@ -287,9 +308,9 @@ impl File {
                                 target = SymlinkTarget::File(target_id, Rc::downgrade(&strong));
                             },
                             Err(err) => {
-                                error!("Error while resolving target of symlink {:?}: {:?}", path, err);
-                                warn!("This indicates an error in the lookup target function, the symlink will be marked as error");
-                                target = SymlinkTarget::Path(PathBuf::new());
+                                error!("Error while resolving target of symlink {:?} -> {:?}: {}", path, target_link, err);
+                                debug!("This indicates an error in the lookup target function, the symlink will be marked as error");
+                                target = SymlinkTarget::Path(target_link);
                                 error = true;
                             }
                         }
@@ -333,7 +354,7 @@ impl File {
                 state: FileState::NotProcessed,
             })
         } else {
-            Self::Other
+            Self::Other(OtherInformation { path })
         }
     }
 }
@@ -353,13 +374,13 @@ impl FileInformation {
                         self.state = FileState::Analyzed;
                     }
                     Err(err) => {
-                        error!("Error while hashing file {:?}: {:?}", self.path, err);
+                        error!("Error while hashing file {:?}: {}", self.path, err);
                         self.state = FileState::Error;
                     }
                 }
             }
             Err(err) => {
-                error!("Error while opening file {:?}: {:?}", self.path, err);
+                error!("Error while opening file {:?}: {}", self.path, err);
                 self.state = FileState::Error;
             }
         }
@@ -378,7 +399,7 @@ impl DirectoryInformation {
 
         match read_dir_result {
             Err(err) => {
-                error!("Error while reading directory {:?}: {:?}", self.path, err);
+                error!("Error while reading directory {:?}: {}", self.path, err);
                 self.state = DirectoryState::Error;
                 return;
             },
@@ -387,7 +408,7 @@ impl DirectoryInformation {
                 for entry in read_dir {
                     let entry = match entry {
                         Err(err) => {
-                            error!("Error while reading directory {:?}: {:?}", self.path, err);
+                            error!("Error while reading directory {:?}: {}", self.path, err);
                             self.state = DirectoryState::Error;
                             return;
                         },
@@ -396,12 +417,15 @@ impl DirectoryInformation {
 
                     let path = entry.path();
                     let file = File::new(path.clone(), follow_symlinks, inside_scope, lookup_id);
-                    if let File::Other = file {
-                        error!("Unsupported file type: {:?}", path);
+                    if let File::Other(_) = file {
+                        warn!("Unsupported file type: {:?}", path);
+                        self.children.push(Rc::new(RefCell::new(FileContainer::InMemory(RefCell::new(file)))));
                     } else {
-                        self.children.push(Rc::new(RefCell::new(FileContainer::InMemory(file))));
+                        self.children.push(Rc::new(RefCell::new(FileContainer::InMemory(RefCell::new(file)))));
                     }
                 }
+                self.state = DirectoryState::Analyzed;
+                return;
             }
         }
     }
@@ -414,7 +438,10 @@ impl DirectoryInformation {
 
         for child in &self.children {
             let child = child.borrow(); // todo check
-            if !child.has_finished_analyzing() {
+            if child.has_errored() {
+                self.state = DirectoryState::Error;
+                return;
+            } else if !child.has_finished_analyzing() {
                 return;
             }
         }
@@ -428,7 +455,7 @@ impl DirectoryInformation {
                 self.state = DirectoryState::Analyzed;
             }
             Err(err) => {
-                error!("Error while hashing directory {:?}: {:?}", self.path, err);
+                error!("Error while hashing directory {:?}: {}", self.path, err);
                 self.state = DirectoryState::Error;
             }
         }
@@ -449,7 +476,7 @@ impl SymlinkInformation {
                         self.state = SymlinkState::Analyzed;
                     }
                     Err(err) => {
-                        error!("Error while hashing symlink {:?}: {:?}", self.path, err);
+                        error!("Error while hashing symlink {:?}: {}", self.path, err);
                         self.state = SymlinkState::Error;
                     }
                 }
@@ -467,7 +494,7 @@ impl SymlinkInformation {
                                 target_ref = loaded;
                             }
                             Err(err) => {
-                                error!("Error while loading symlink target {:?}: {:?}", self.path, err);
+                                error!("Error while loading symlink target {:?}: {}", self.path, err);
                                 self.state = SymlinkState::Error;
                                 return;
                             }
@@ -482,7 +509,7 @@ impl SymlinkInformation {
                 let file = target_ref.borrow();
                 match *file {
                     FileContainer::InMemory(ref file) => {
-                        self.content_hash = file.get_content_hash().clone();
+                        self.content_hash = file.borrow().get_content_hash().clone();
                         self.state = SymlinkState::Analyzed;
                         return;
                     },
@@ -504,7 +531,7 @@ impl SymlinkInformation {
                         let file = loaded.borrow();
                         match *file {
                             FileContainer::InMemory(ref file) => {
-                                self.content_hash = file.get_content_hash().clone();
+                                self.content_hash = file.borrow().get_content_hash().clone();
                                 self.state = SymlinkState::Analyzed;
                             },
                             FileContainer::OnDisk(_) => {
@@ -518,7 +545,7 @@ impl SymlinkInformation {
                         }
                     },
                     Err(err) => {
-                        error!("Error while loading symlink target {:?}: {:?}", self.path, err);
+                        error!("Error while loading symlink target {:?}: {}", self.path, err);
                         self.state = SymlinkState::Error;
                     }
                 }

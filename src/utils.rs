@@ -64,7 +64,7 @@ pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileCont
         content_size += 1;
         match child.borrow().deref() {
             FileContainer::InMemory(file) => {
-                Digest::update(&mut hasher, file.get_content_hash().as_bytes());
+                Digest::update(&mut hasher, file.borrow().get_content_hash().as_bytes());
             },
             FileContainer::OnDisk(_) => {
                 Err(anyhow!("Hashing of unloaded file is not supported."))?
