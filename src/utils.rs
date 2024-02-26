@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc};
 use crate::data::common::{FileContainer, GeneralHash};
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use sha2::Digest;
 
 pub trait LexicalAbsolute {
@@ -66,12 +66,9 @@ pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileCont
             FileContainer::InMemory(file) => {
                 Digest::update(&mut hasher, file.borrow().get_content_hash().as_bytes());
             },
-            FileContainer::OnDisk(_) => {
+            /* FileContainer::OnDisk(_) => {
                 Err(anyhow!("Hashing of unloaded file is not supported."))?
-            },
-            FileContainer::DoesNotExist => {
-                Err(anyhow!("Hashing of non-existent file is not supported."))?
-            }
+            }, */
         }
     }
 

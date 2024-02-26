@@ -2,15 +2,17 @@ use std::cell::{RefCell};
 use std::fs;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::rc::{Rc, Weak};
+use std::rc::{Rc};
 use std::time::SystemTime;
 use anyhow::{anyhow, Result};
 use log::{debug, error, warn};
 use serde::{Serialize, Serializer};
+use crate::data::fileid;
+use crate::data::fileid::HandleIdentifier;
 use crate::utils;
 
-type ResolveNodeFn = fn(&HandleIdentifier) -> Result<Rc<RefCell<FileContainer>>>;
-type PathInScopeFn = fn(&Path) -> bool;
+// type ResolveNodeFn = fn(&HandleIdentifier) -> Result<Rc<RefCell<FileContainer>>>;
+// type PathInScopeFn = fn(&Path) -> bool;
 
 
 #[derive(Debug, Hash, PartialEq, Clone)]
@@ -47,11 +49,6 @@ impl GeneralHash {
 
 static NULL_HASH_SHA256: GeneralHash = GeneralHash::SHA256([0; 32]);
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct HandleIdentifier {
-    pub inode: u64,
-    pub drive: u64,
-}
 
 static NULL_HANDLE: HandleIdentifier = HandleIdentifier {
     inode: 0,
@@ -68,7 +65,7 @@ pub enum FileState {
 #[derive(Debug, Clone, Serialize)]
 pub struct FileInformation {
     pub id: HandleIdentifier,
-    pub path: std::path::PathBuf,
+    pub path: PathBuf,
     pub modified: u64,
     pub content_hash: GeneralHash,
     pub content_size: u64,
@@ -86,7 +83,7 @@ pub enum DirectoryState {
 #[derive(Debug, Clone, Serialize)]
 pub struct DirectoryInformation {
     pub id: HandleIdentifier,
-    pub path: std::path::PathBuf,
+    pub path: PathBuf,
     pub modified: u64,
     pub content_hash: GeneralHash,
     pub number_of_children: u64,
@@ -104,7 +101,7 @@ pub enum SymlinkState {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum SymlinkTarget {
-    File(HandleIdentifier, Weak<RefCell<FileContainer>>), // if the symlink points to a file
+    // File(HandleIdentifier, Weak<RefCell<FileContainer>>), // if the symlink points to a file
     Path(PathBuf), // if follow symlinks is disabled, or path is outside the analysis scope
 }
 
@@ -135,8 +132,7 @@ pub enum File {
 #[derive(Debug, Clone, Serialize)]
 pub enum FileContainer {
     InMemory(RefCell<File>),
-    OnDisk(HandleIdentifier),
-    DoesNotExist, // e.g. if symlink points to a non-existing file
+    // OnDisk(HandleIdentifier),
 }
 
 // ---- IMPLEMENTATION ----
@@ -168,23 +164,49 @@ impl File {
             File::Other(_) => &NULL_HASH_SHA256,
         }
     }
+
+    pub fn is_directory(&self) -> bool {
+        match self {
+            File::Directory(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_symlink(&self) -> bool {
+        match self {
+            File::Symlink(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_file(&self) -> bool {
+        match self {
+            File::File(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_other(&self) -> bool {
+        match self {
+            File::Other(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl FileContainer {
     #[deprecated]
-    pub fn id(&self) -> Option<HandleIdentifier> {
+    pub fn id(&self) -> HandleIdentifier {
         match self {
-            FileContainer::InMemory(file) => Some(file.borrow().id().clone()),
-            FileContainer::OnDisk(id) => Some(id.clone()),
-            FileContainer::DoesNotExist => None,
+            FileContainer::InMemory(file) => file.borrow().id().clone(),
+            // FileContainer::OnDisk(id) => id.clone(),
         }
     }
 
     pub fn has_finished_analyzing(&self) -> bool {
         match self {
             FileContainer::InMemory(file) => file.borrow().has_finished_analyzing(),
-            FileContainer::OnDisk(_) => true, // files loaded out of memory are assumed to be fully processed
-            FileContainer::DoesNotExist => true,
+            // FileContainer::OnDisk(_) => true, // files loaded out of memory are assumed to be fully processed
         }
     }
 
@@ -196,14 +218,13 @@ impl FileContainer {
                 File::Symlink(info) => matches!(info.state, SymlinkState::Error),
                 File::Other(_) => false,
             },
-            FileContainer::OnDisk(_) => false, // files loaded out of memory are assumed to be fully processed
-            FileContainer::DoesNotExist => false,
+            // FileContainer::OnDisk(_) => false, // files loaded out of memory are assumed to be fully processed
         }
     }
 }
 
 impl File {
-    pub fn new(path: PathBuf, follow_symlinks: bool, inside_scope: PathInScopeFn, lookup_id: ResolveNodeFn) -> Self {
+    pub fn new(path: PathBuf, /* follow_symlinks: bool, inside_scope: PathInScopeFn, lookup_id: ResolveNodeFn */) -> Self {
         let metadata_result = fs::symlink_metadata(&path);
         let metadata ;
         match metadata_result {
@@ -213,7 +234,7 @@ impl File {
                 return Self::Other(OtherInformation { path });
             }
         }
-        let handle_result = same_file::Handle::from_path(&path);
+        let handle_result = fileid::from_path(&path);
         let handle;
         match handle_result {
             Ok(h) => handle = h,
@@ -222,10 +243,6 @@ impl File {
                 return Self::Other(OtherInformation { path });
             }
         }
-
-        let inode = handle.ino();
-        let drive = handle.dev();
-        drop(handle);
 
         let modified_result = metadata.modified()
             .map(|time| time.duration_since(SystemTime::UNIX_EPOCH)
@@ -254,10 +271,7 @@ impl File {
                 Err(err) => {
                     error!("Error while reading symlink {:?}: {}", path, err);
                     return Self::Symlink(SymlinkInformation {
-                        id: HandleIdentifier {
-                            inode,
-                            drive,
-                        },
+                        id: handle,
                         path,
                         modified,
                         content_hash: GeneralHash::new_sha256(),
@@ -268,26 +282,26 @@ impl File {
                 Ok(target_link) => {
                     let target;
 
+                    let follow_symlinks = false; // todo add symlinks
+                    let inside_scope = |_path: &'_ Path| -> bool { false };
+
                     if !follow_symlinks {
                         target = SymlinkTarget::Path(target_link);
                     } else if !inside_scope(&target_link) {
                         target = SymlinkTarget::Path(target_link);
                     } else {
-                        let target_handle_result = same_file::Handle::from_path(&target_link);
-                        let target_inode;
-                        let target_drive;
+                        let lookup_id = |_id: &'_ HandleIdentifier| -> Result<anyhow::Error> { Err(anyhow!("lookup_id")) };
+
+                        let target_handle_result = fileid::from_path(&target_link);
+                        let target_id;
                         match target_handle_result {
                             Ok(handle) => {
-                                target_inode = handle.ino();
-                                target_drive = handle.dev();
+                                target_id = handle;
                             },
                             Err(err) => {
                                 error!("Error while reading symlink target {:?}: {}", path, err);
                                 return Self::Symlink(SymlinkInformation {
-                                    id: HandleIdentifier {
-                                        inode,
-                                        drive,
-                                    },
+                                    id: handle,
                                     path,
                                     modified,
                                     content_hash: GeneralHash::new_sha256(),
@@ -297,15 +311,11 @@ impl File {
                             }
                         }
 
-                        let target_id = HandleIdentifier {
-                            inode: target_inode,
-                            drive: target_drive,
-                        };
-
                         let looked_up_target_node_result = lookup_id(&target_id);
                         match looked_up_target_node_result {
-                            Ok(strong) => {
-                                target = SymlinkTarget::File(target_id, Rc::downgrade(&strong));
+                            Ok(_strong) => {
+                                todo!("todo symlinks");
+                                //target = SymlinkTarget::File(target_id, Rc::downgrade(&strong));
                             },
                             Err(err) => {
                                 error!("Error while resolving target of symlink {:?} -> {:?}: {}", path, target_link, err);
@@ -316,10 +326,7 @@ impl File {
                         }
                     }
                     Self::Symlink(SymlinkInformation {
-                        id: HandleIdentifier {
-                            inode,
-                            drive,
-                        },
+                        id: handle,
                         path,
                         modified,
                         content_hash: GeneralHash::new_sha256(),
@@ -330,10 +337,7 @@ impl File {
             }
         } else if metadata.is_dir() {
             Self::Directory(DirectoryInformation {
-                id: HandleIdentifier {
-                    inode,
-                    drive,
-                },
+                id: handle,
                 path,
                 modified,
                 number_of_children: 0,
@@ -343,10 +347,7 @@ impl File {
             })
         } else if metadata.is_file() {
             Self::File(FileInformation {
-                id: HandleIdentifier {
-                    inode,
-                    drive,
-                },
+                id: handle,
                 path,
                 modified,
                 content_hash: GeneralHash::new_sha256(),
@@ -388,7 +389,7 @@ impl FileInformation {
 }
 
 impl DirectoryInformation {
-    pub fn analyze_expand(&mut self, follow_symlinks: bool, inside_scope: PathInScopeFn, lookup_id: ResolveNodeFn) {
+    pub fn analyze_expand(&mut self/*, follow_symlinks: bool, inside_scope: PathInScopeFn, lookup_id: ResolveNodeFn*/) {
         if self.state != DirectoryState::NotProcessed {
             return;
         }
@@ -416,7 +417,7 @@ impl DirectoryInformation {
                     };
 
                     let path = entry.path();
-                    let file = File::new(path.clone(), follow_symlinks, inside_scope, lookup_id);
+                    let file = File::new(path.clone()/*, follow_symlinks, inside_scope, lookup_id*/);
                     if let File::Other(_) = file {
                         warn!("Unsupported file type: {:?}", path);
                         self.children.push(Rc::new(RefCell::new(FileContainer::InMemory(RefCell::new(file)))));
@@ -460,10 +461,22 @@ impl DirectoryInformation {
             }
         }
     }
+
+    pub fn get_next_unfinshed_child(&self) -> Option<Rc<RefCell<FileContainer>>> {
+        for child in &self.children {
+            let child_borrow = child.borrow();
+            if child_borrow.has_errored() {
+                return None;
+            } else if !child_borrow.has_finished_analyzing() {
+                return Some(Rc::clone(child));
+            }
+        }
+        None
+    }
 }
 
 impl SymlinkInformation {
-    pub fn analyze(&mut self, load_id: ResolveNodeFn) {
+    pub fn analyze(&mut self/*, load_id: ResolveNodeFn*/) {
         if self.state != SymlinkState::NotProcessed {
             return;
         }
@@ -481,7 +494,7 @@ impl SymlinkInformation {
                     }
                 }
             },
-            SymlinkTarget::File(target_id, weak) => {
+            /* SymlinkTarget::File(target_id, weak) => {
                 let strong = weak.upgrade();
                 let target_ref;
 
@@ -509,19 +522,19 @@ impl SymlinkInformation {
                 let file = target_ref.borrow();
                 match *file {
                     FileContainer::InMemory(ref file) => {
+                        let file_borrow = file.borrow();
+                        if !file_borrow.has_finished_analyzing() {
+                            debug!("Symlink target {:?} is not analyzed yet", self.path);
+                            return;
+                        }
                         self.content_hash = file.borrow().get_content_hash().clone();
                         self.state = SymlinkState::Analyzed;
                         return;
                     },
-                    FileContainer::OnDisk(ref target_id) => {
+                    /*FileContainer::OnDisk(ref target_id) => {
                         debug!("Symlink target {:?} is not loaded into memory", self.path);
                         target_id_load = target_id.clone();
-                    },
-                    FileContainer::DoesNotExist => {
-                        error!("Symlink target {:?} does not exist", self.path);
-                        self.state = SymlinkState::Error;
-                        return;
-                    }
+                    },*/
                 }
                 drop(file);
 
@@ -534,14 +547,10 @@ impl SymlinkInformation {
                                 self.content_hash = file.borrow().get_content_hash().clone();
                                 self.state = SymlinkState::Analyzed;
                             },
-                            FileContainer::OnDisk(_) => {
+                            /*FileContainer::OnDisk(_) => {
                                 error!("Target of symlink {:?} is still not loaded into memory", self.path);
                                 self.state = SymlinkState::Error;
-                            },
-                            FileContainer::DoesNotExist => {
-                                error!("Target of symlink {:?} does not exist", self.path);
-                                self.state = SymlinkState::Error;
-                            }
+                            },*/
                         }
                     },
                     Err(err) => {
@@ -549,7 +558,7 @@ impl SymlinkInformation {
                         self.state = SymlinkState::Error;
                     }
                 }
-            }
+            } */
         }
     }
 }
