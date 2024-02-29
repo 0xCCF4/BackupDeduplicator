@@ -1,10 +1,23 @@
+extern crate num_cpus;
+
 pub mod utils;
 
-pub mod cmd {
+mod cmd {
     pub mod build;
 }
+pub use cmd::*;
 
 pub mod data {
-    pub mod common;
-    pub mod fileid;
+    mod file;
+    pub use file::*;
+    mod fileid;
+    pub use fileid::*;
+    mod job;
+    pub use job::*;
+    mod path;
+    pub use path::*;
+    mod hash;
+    pub use hash::*;
 }
+
+pub mod threadpool;

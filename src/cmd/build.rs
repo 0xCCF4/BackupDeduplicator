@@ -1,12 +1,7 @@
-use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use anyhow::{anyhow, Result};
-use log::{info, Level, log_enabled, trace};
-use sysinfo::Pid;
-use crate::data::common::{File, FileContainer};
-use crate::data::fileid::HandleIdentifier;
+use std::path::{PathBuf};
+use std::sync::mpsc::Sender;
+use anyhow::{Result};
+use crate::threadpool::ThreadPool;
 
 pub struct BuildSettings {
     pub directory: PathBuf,
@@ -14,11 +9,26 @@ pub struct BuildSettings {
     pub follow_symlinks: bool,
     pub output: PathBuf,
     pub absolute_paths: bool,
+    pub threads: Option<usize>,
 }
 
 pub fn run(
     build_settings: BuildSettings,
 ) -> Result<()> {
+    let pool: ThreadPool<u32, u32> = ThreadPool::new(build_settings.threads.unwrap_or_else(|| num_cpus::get()), &worker_run);
+
+    for _ in 0..15 {
+        pool.publish(3); // Assuming Job::new is a constructor for Job
+    }
+
+    return Ok(());
+}
+
+fn worker_run(id: usize, job: u32, result_publish: &Sender<u32>, job_publish: &Sender<u32>) {
+    // implementation of worker_run
+}
+    
+    /*
 
     let inside_scope = |path: &'_ Path| -> bool { true };
     let lookup_id = |id: &'_ HandleIdentifier| -> Result<anyhow::Error> { Err(anyhow!("lookup_id")) };
@@ -90,10 +100,11 @@ fn analyze_file(root: Rc<RefCell<FileContainer>>) {
                     }
                 }
             },
-            /* FileContainer::OnDisk(_) => {
+            FileContainer::OnDisk(_) => {
                 todo!("Unloading files from memory to disk not yet supported");
-            }, */
+            },
         }
     }
 
 }
+*/

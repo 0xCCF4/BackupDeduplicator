@@ -1,13 +1,18 @@
 use std::{env};
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, LevelFilter, trace};
-use backup_deduplicator::cmd::build::BuildSettings;
+use backup_deduplicator::build::BuildSettings;
 use backup_deduplicator::utils::LexicalAbsolute;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Arguments {
+    /// Number of threads
+    /// If set, the tool will use the given number of threads for parallel processing.
+    /// If not set, the tool will use the number of logical cores on the system.
+    #[arg(short, long)]
+    threads: Option<usize>,
     /// Dry-run
     /// If set, the tool will not move any files but only print the actions it would take.
     #[arg(short = 'n', long, default_value = "false")]
@@ -99,6 +104,16 @@ fn main() {
 
     if args.dry_run {
         info!("Running in dry-run mode");
+    }
+    
+    if let Some(threads) = args.threads {
+        if threads <= 0 {
+            eprintln!("Invalid number of threads: {}", threads);
+            std::process::exit(exitcode::CONFIG);
+        }
+        info!("Using {} threads", threads);
+    } else {
+        info!("Using optimal number of threads");
     }
 
     match args.command {
@@ -210,12 +225,13 @@ fn main() {
 
             // Run the command
 
-            match backup_deduplicator::cmd::build::run(BuildSettings {
+            match backup_deduplicator::build::run(BuildSettings {
                 directory: directory.to_path_buf(),
                 into_archives: archives,
                 follow_symlinks,
                 output,
                 absolute_paths,
+                threads: args.threads,
             }) {
                 Ok(_) => {
                     info!("Build command completed successfully");
