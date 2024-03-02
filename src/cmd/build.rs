@@ -1,6 +1,7 @@
 use std::path::{PathBuf};
 use std::sync::mpsc::Sender;
 use anyhow::{Result};
+use crate::data::{File, FilePath, Job, JobTrait, PathTarget, ResultTrait};
 use crate::threadpool::ThreadPool;
 
 pub struct BuildSettings {
@@ -12,20 +13,32 @@ pub struct BuildSettings {
     pub threads: Option<usize>,
 }
 
+impl JobTrait for Job {
+    fn job_id(&self) -> usize {
+        Job::job_id(self)
+    }
+}
+
+impl ResultTrait for File {
+    
+}
+
 pub fn run(
     build_settings: BuildSettings,
 ) -> Result<()> {
-    let pool: ThreadPool<u32, u32> = ThreadPool::new(build_settings.threads.unwrap_or_else(|| num_cpus::get()), &worker_run);
+    let pool: ThreadPool<Job, File> = ThreadPool::new(build_settings.threads.unwrap_or_else(|| num_cpus::get()), worker_run);
 
-    for _ in 0..15 {
-        pool.publish(3); // Assuming Job::new is a constructor for Job
-    }
+    let root_file = FilePath::from_path(build_settings.directory, PathTarget::File);
+    let root_job = Job::new(None, root_file);
+    
+    
 
     return Ok(());
 }
 
-fn worker_run(id: usize, job: u32, result_publish: &Sender<u32>, job_publish: &Sender<u32>) {
+fn worker_run(id: usize, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>) {
     // implementation of worker_run
+    
 }
     
     /*

@@ -2,6 +2,7 @@ use std::sync::{Arc, mpsc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use log::{debug, error, trace, warn};
+use crate::data::{JobTrait, ResultTrait};
 
 struct Worker
 {
@@ -10,7 +11,7 @@ struct Worker
 }
 
 impl Worker {
-    fn new<Job: std::marker::Send, Result: std::marker::Send>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: &'static fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> Worker {
+    fn new<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> Worker {
         let thread = thread::spawn(move || {
             Worker::worker_entry(id, job_receive, result_publish, job_publish, func);
         });
@@ -18,7 +19,7 @@ impl Worker {
         Worker { id, thread: Some(thread) }
     }
 
-    fn worker_entry<Job: std::marker::Send, Result: std::marker::Send>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: &'static fn(usize, Job, &Sender<Result>, &Sender<Job>)) {
+    fn worker_entry<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) {
         loop {
             let job = job_receive.lock();
 
@@ -38,7 +39,7 @@ impl Worker {
                     break;
                 }
                 Ok(job) => {
-                    // trace!("Worker {} received job {}", id, job.job_id());
+                    trace!("Worker {} received job {}", id, job.job_id());
                     func(id, job, &result_publish, &job_publish);
                 }
             }
@@ -57,8 +58,8 @@ where
     result_receive: Receiver<Result>,
 }
 
-impl<Job: std::marker::Send, Result: std::marker::Send> ThreadPool<Job, Result> {
-    pub fn new(size: usize, func: &'static fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> ThreadPool<Job, Result> {
+impl<Job: std::marker::Send + JobTrait + 'static, Result: std::marker::Send + ResultTrait + 'static> ThreadPool<Job, Result> {
+    pub fn new(size: usize, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> ThreadPool<Job, Result> {
         assert!(size > 0);
 
         let mut workers = Vec::with_capacity(size);
@@ -100,7 +101,12 @@ impl<Job: std::marker::Send, Result: std::marker::Send> ThreadPool<Job, Result> 
                         error!("ThreadPool is shutting down. Cannot publish job.");
                     }
                     Some(job_publish) => {
-                        job_publish.send(job).expect("Failed to send job. This should never fail.");
+                        match job_publish.send(job) {
+                            Err(e) => {
+                                error!("Failed to publish job on thread pool. {}", e);
+                            }
+                            Ok(_) => {}
+                        }
                     }
                 }
             }
@@ -113,25 +119,29 @@ impl<Job: std::marker::Send, Result: std::marker::Send> ThreadPool<Job, Result> 
             let job = job_receive.recv();
 
             match job {
-                Err(e) => {
-                    trace!("Pool shutting down {}", e);
+                Err(_) => {
+                    trace!("Pool worker shutting down");
                     break;
                 }
                 Ok(job) => {
                     match job_publish.lock() {
                         Err(e) => {
-                            error!("Pool shutting down {}", e);
+                            error!("Pool worker shutting down: {}", e);
                             break;
                         }
                         Ok(job_publish) => {
                             if let Some(job_publish) = job_publish.as_ref() {
-                                job_publish.send(job).expect("Failed to send job. This should never fail.");
+                                job_publish.send(job).expect("Pool worker failed to send job. This should never fail.");
                             }
                         }
                     }
                 }
             }
         }
+    }
+    
+    pub fn receive(&self) -> std::result::Result<Result, mpsc::RecvError> {
+        self.result_receive.recv()
     }
 }
 

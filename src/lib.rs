@@ -20,4 +20,6 @@ pub mod data {
     pub use hash::*;
 }
 
+mod analysis;
+
 pub mod threadpool;

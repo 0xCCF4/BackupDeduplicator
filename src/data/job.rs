@@ -33,3 +33,9 @@ impl Job {
         self.id
     }
 }
+
+pub trait JobTrait<T: std::marker::Send = Self> {
+    fn job_id(&self) -> usize;
+}
+
+pub trait ResultTrait<T: std::marker::Send = Self> {}
