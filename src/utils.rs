@@ -1,7 +1,7 @@
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use anyhow::{Result};
 use sha2::Digest;
-use crate::data::GeneralHash;
+use crate::data::{File, GeneralHash};
 
 pub trait LexicalAbsolute {
     fn to_lexical_absolute(&self) -> std::io::Result<PathBuf>;
@@ -50,8 +50,7 @@ where T: std::io::Read {
     Ok(content_size)
 }
 
-/*
-pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileContainer>>>, hash: &mut GeneralHash) -> Result<u64> {
+pub fn hash_directory<'a>(children: impl Iterator<Item = &'a File>, hash: &mut GeneralHash) -> Result<u64> {
     let mut hasher = match hash {
         GeneralHash::SHA256(_) => sha2::Sha256::new(),
     };
@@ -60,14 +59,7 @@ pub fn hash_directory<'a>(children: impl Iterator<Item = &'a Rc<RefCell<FileCont
 
     for child in children {
         content_size += 1;
-        match child.borrow().deref() {
-            FileContainer::InMemory(file) => {
-                Digest::update(&mut hasher, file.borrow().get_content_hash().as_bytes());
-            },
-            /* FileContainer::OnDisk(_) => {
-                Err(anyhow!("Hashing of unloaded file is not supported."))?
-            }, */
-        }
+        Digest::update(&mut hasher, child.get_content_hash().as_bytes());
     }
 
     *hash = match hash {
@@ -90,4 +82,3 @@ pub fn hash_path(path: &Path, hash: &mut GeneralHash) -> Result<()> {
 
     Ok(())
 }
- */

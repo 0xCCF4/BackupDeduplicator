@@ -1,8 +1,11 @@
 use std::sync::{Arc, mpsc, Mutex};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::thread;
+use std::time::Duration;
 use log::{debug, error, trace, warn};
 use crate::data::{JobTrait, ResultTrait};
+
+type WorkerEntry<Job, Result, Argument> = fn(usize, Job, &Sender<Result>, &Sender<Job>, &mut Argument);
 
 struct Worker
 {
@@ -11,15 +14,15 @@ struct Worker
 }
 
 impl Worker {
-    fn new<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> Worker {
+    fn new<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static, Argument: std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: WorkerEntry<Job, Result, Argument>, arg: Argument) -> Worker {
         let thread = thread::spawn(move || {
-            Worker::worker_entry(id, job_receive, result_publish, job_publish, func);
+            Worker::worker_entry(id, job_receive, result_publish, job_publish, func, arg);
         });
 
         Worker { id, thread: Some(thread) }
     }
 
-    fn worker_entry<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) {
+    fn worker_entry<Job: JobTrait + std::marker::Send + 'static, Result: ResultTrait + std::marker::Send + 'static, Argument: std::marker::Send + 'static>(id: usize, job_receive: Arc<Mutex<Receiver<Job>>>, result_publish: Sender<Result>, job_publish: Sender<Job>, func: WorkerEntry<Job, Result, Argument>, mut arg: Argument) {
         loop {
             let job = job_receive.lock();
 
@@ -40,7 +43,7 @@ impl Worker {
                 }
                 Ok(job) => {
                     trace!("Worker {} received job {}", id, job.job_id());
-                    func(id, job, &result_publish, &job_publish);
+                    func(id, job, &result_publish, &job_publish, &mut arg);
                 }
             }
         }
@@ -59,10 +62,10 @@ where
 }
 
 impl<Job: std::marker::Send + JobTrait + 'static, Result: std::marker::Send + ResultTrait + 'static> ThreadPool<Job, Result> {
-    pub fn new(size: usize, func: fn(usize, Job, &Sender<Result>, &Sender<Job>)) -> ThreadPool<Job, Result> {
-        assert!(size > 0);
+    pub fn new<Argument: std::marker::Send + 'static>(mut args: Vec<Argument>, func: WorkerEntry<Job, Result, Argument>) -> ThreadPool<Job, Result> {
+        assert!(args.len() > 0);
 
-        let mut workers = Vec::with_capacity(size);
+        let mut workers = Vec::with_capacity(args.len());
 
         let (job_publish, job_receive) = mpsc::channel();
 
@@ -70,8 +73,10 @@ impl<Job: std::marker::Send + JobTrait + 'static, Result: std::marker::Send + Re
         let (result_publish, result_receive) = mpsc::channel();
         let (thread_publish_job, thread_receive_job) = mpsc::channel();
 
-        for id in 0..size {
-            workers.push(Worker::new(id, Arc::clone(&job_receive), result_publish.clone(), thread_publish_job.clone(), func));
+        let mut id = 0;
+        while let Some(arg) = args.pop() {
+            workers.push(Worker::new(id, Arc::clone(&job_receive), result_publish.clone(), thread_publish_job.clone(), func, arg));
+            id += 1;
         }
 
         let job_publish = Arc::new(Mutex::new(Some(job_publish)));
@@ -142,6 +147,10 @@ impl<Job: std::marker::Send + JobTrait + 'static, Result: std::marker::Send + Re
     
     pub fn receive(&self) -> std::result::Result<Result, mpsc::RecvError> {
         self.result_receive.recv()
+    }
+
+    pub fn receive_timeout(&self, timeout: Duration) -> std::result::Result<Result, RecvTimeoutError> {
+        self.result_receive.recv_timeout(timeout)
     }
 }
 

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
-use crate::data::FilePath;
+use crate::data::{File, FilePath};
 
-pub type SharedJob = Arc<Mutex<Job>>;
+pub type SharedJob = Arc<Job>;
 
 static JOB_COUNTER: Mutex<usize> = Mutex::new(0);
 
@@ -11,12 +11,20 @@ fn new_job_counter_id() -> usize {
     (*counter).clone()
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum JobState {
+    NotProcessed,
+    Analyzed,
+}
+
 #[derive(Debug)]
 pub struct Job {
     id: usize,
     pub parent: Option<SharedJob>,
-    pub unfinished_children: Mutex<u32>,
+    pub unfinished_children: Mutex<usize>,
+    pub finished_children: Mutex<Vec<File>>,
     pub target_path: FilePath,
+    pub state: JobState,
 }
 
 impl Job {
@@ -26,6 +34,8 @@ impl Job {
             parent,
             unfinished_children: Mutex::new(0),
             target_path,
+            state: JobState::NotProcessed,
+            finished_children: Mutex::new(Vec::new()),
         }
     }
     
@@ -33,6 +43,13 @@ impl Job {
         self.id
     }
 }
+
+impl JobTrait for Job {
+    fn job_id(&self) -> usize {
+        Job::job_id(self)
+    }
+}
+
 
 pub trait JobTrait<T: std::marker::Send = Self> {
     fn job_id(&self) -> usize;

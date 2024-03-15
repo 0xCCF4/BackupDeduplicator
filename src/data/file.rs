@@ -8,29 +8,12 @@ use crate::data::{FilePath, GeneralHash, NULL_HASH_SHA256};
 
 
 
-
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
-pub enum FileState {
-    NotProcessed,
-    Analyzed,
-    Error,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct FileInformation {
     pub path: FilePath,
     pub modified: u64,
     pub content_hash: GeneralHash,
     pub content_size: u64,
-    pub state: FileState,
-}
-
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
-pub enum DirectoryState {
-    NotProcessed, // the directory has not been processed yet
-    Evaluating, // the directory is being processed
-    Analyzed, // the directory has been fully processed
-    Error, // an error occurred while processing the directory, will bubble up to the parent directory
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -39,22 +22,7 @@ pub struct DirectoryInformation {
     pub modified: u64,
     pub content_hash: GeneralHash,
     pub number_of_children: u64,
-    pub children: Vec<SharedFile>,
-    pub state: DirectoryState,
-}
-
-#[derive(Debug, Clone, PartialEq, Copy, Serialize)]
-pub enum SymlinkState {
-    NotProcessed, // the symlink has not been processed yet
-    Analyzed, // the symlink has been fully processed, target is analyzed or follow symlink is disabled
-    Skipped, // if a loop is detected, we skip the symlink - a loop occurs if the symlink points to a directory that is in the processing state
-    Error, // an error occurred while processing the symlink, will bubble up to the parent directory
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub enum SymlinkTarget {
-    // File(HandleIdentifier, Weak<RefCell<FileContainer>>), // if the symlink points to a file
-    Path(PathBuf), // if follow symlinks is disabled, or path is outside the analysis scope
+    pub children: Vec<File>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,13 +30,12 @@ pub struct SymlinkInformation {
     pub path: FilePath,
     pub modified: u64,
     pub content_hash: GeneralHash, // equal to the target file's hash or if not following symlinks, the symlink's path hashed
-    pub target: SymlinkTarget,
-    pub state: SymlinkState,
+    pub target: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OtherInformation {
-    pub path: PathBuf,
+    pub path: FilePath,
 }
 
 
@@ -94,15 +61,6 @@ impl File {
             File::Other(_) => &NULL_HANDLE,
         }
     }*/
-
-    pub fn has_finished_analyzing(&self) -> bool {
-        match self {
-            File::File(info) => matches!(info.state, FileState::Analyzed | FileState::Error),
-            File::Directory(info) => matches!(info.state, DirectoryState::Analyzed | DirectoryState::Error),
-            File::Symlink(info) => matches!(info.state, SymlinkState::Analyzed | SymlinkState::Error),
-            File::Other(_) => true,
-        }
-    }
 
     pub fn get_content_hash(&self) -> &GeneralHash {
         match self {
