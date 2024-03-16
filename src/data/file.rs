@@ -38,6 +38,12 @@ pub struct OtherInformation {
     pub path: FilePath,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct StubInformation {
+    pub path: FilePath,
+    pub content_hash: GeneralHash,
+}
+
 
 #[derive(Debug, Clone, Serialize)]
 pub enum File {
@@ -45,7 +51,7 @@ pub enum File {
     Directory(DirectoryInformation),
     Symlink(SymlinkInformation),
     Other(OtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
-    Stub(GeneralHash), // for files that are already analyzed
+    Stub(StubInformation), // for files that are already analyzed
 }
 
 pub type SharedFile = Arc<Mutex<File>>;
@@ -69,7 +75,7 @@ impl File {
             File::Directory(info) => &info.content_hash,
             File::Symlink(info) => &info.content_hash,
             File::Other(_) => &NULL_HASH_SHA256,
-            File::Stub(hash) => hash,
+            File::Stub(info) => &info.content_hash,
         }
     }
 
