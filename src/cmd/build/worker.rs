@@ -18,8 +18,7 @@ mod symlink;
 
 pub struct WorkerArgument {
     pub follow_symlinks: bool,
-
-    pub hash: GeneralHashType,
+    pub hash_type: GeneralHashType,
 }
 
 pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {

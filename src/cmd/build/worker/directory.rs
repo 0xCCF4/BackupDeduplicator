@@ -59,7 +59,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Jo
             }
         },
         JobState::Analyzed => {
-            let mut hash = GeneralHash::from_type(arg.hash);
+            let mut hash = GeneralHash::from_type(arg.hash_type);
             let mut children = Vec::new();
 
             let mut error;

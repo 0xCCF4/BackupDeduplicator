@@ -1,7 +1,9 @@
 use std::{env};
+use std::str::FromStr;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, LevelFilter, trace};
 use backup_deduplicator::build::BuildSettings;
+use backup_deduplicator::data::GeneralHashType;
 use backup_deduplicator::utils::LexicalAbsolute;
 
 /// A simple command line tool to deduplicate backups.
@@ -23,9 +25,6 @@ struct Arguments {
     /// Debug, if set, the tool will print debug information (including debug implies setting verbose). Setting the RUST_LOG env var overrides this flag.
     #[arg(short, long, default_value = "false")]
     debug: bool,
-    /// Force, if set, the tool will not ask for confirmation before overwriting files.
-    #[arg(short, long, default_value = "false")]
-    force: bool,
     /// The subcommand to run
     #[command(subcommand)]
     command: Command,
@@ -54,6 +53,12 @@ enum Command {
         /// Working directory, if set, the tool will use the current working directory as the base for relative paths.
         #[arg(short, long)]
         working_directory: Option<String>,
+        /// Force overwrite, if set, the tool will overwrite the output file if it exists. If not set, the tool will continue an existing analysis
+        #[arg(long="overwrite", default_value = "false")]
+        recreate_output: bool,
+        /// Hash algorithm to use
+        #[arg(long="hash", default_value = "sha256")]
+        hash_type: String,
     },
     /*
     /// Update a hash-tree with the given directory
@@ -124,8 +129,20 @@ fn main() {
             output,
             absolute_paths,
             working_directory,
+            recreate_output,
+            hash_type
         } => {
             debug!("Running build command");
+            
+            // Check hash_type
+            
+            let hash_type = match GeneralHashType::from_str(hash_type.as_str()) {
+                Ok(hash) => hash,
+                Err(supported) => {
+                    eprintln!("Unsupported hash type: {}. The values {} are supported.", hash_type.as_str(), supported);
+                    std::process::exit(exitcode::CONFIG);
+                }
+            };
 
             // Convert to paths and check if they exist
 
@@ -135,11 +152,6 @@ fn main() {
 
             if !directory.exists() {
                 eprintln!("Target directory does not exist: {}", directory.display());
-                std::process::exit(exitcode::CONFIG);
-            }
-            if output.exists() && !args.force {
-                eprintln!("Output file does exist: {}", output.display());
-                eprintln!("Use --force to overwrite");
                 std::process::exit(exitcode::CONFIG);
             }
 
@@ -232,6 +244,8 @@ fn main() {
                 output,
                 absolute_paths,
                 threads: args.threads,
+                continue_file: !recreate_output,
+                hash_type
             }) {
                 Ok(_) => {
                     info!("Build command completed successfully");

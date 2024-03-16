@@ -1,27 +1,27 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 use anyhow::{Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum ArchiveType {
     Tar,
     Zip,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum PathTarget {
     File,
     // Archive(ArchiveType),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PathComponent {
     pub path: PathBuf,
     pub target: PathTarget,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct FilePath {
     pub path: Vec<PathComponent>
 }
@@ -89,3 +89,11 @@ impl FilePath {
         return result;
     }
 }
+
+impl PartialEq for FilePath {
+    fn eq(&self, other: &Self) -> bool {
+        self.path.len() == other.path.len() && self.path.iter().zip(other.path.iter()).all(|(a, b)| a == b)
+    }
+}
+
+impl Eq for FilePath {}

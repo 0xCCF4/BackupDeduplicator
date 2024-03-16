@@ -1,4 +1,6 @@
+use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Result};
 use crate::data::{File, GeneralHash};
 
@@ -68,4 +70,17 @@ pub fn hash_path(path: &Path, hash: &mut GeneralHash) -> Result<()> {
     *hash = hasher.finalize();
 
     Ok(())
+}
+
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect()
+}
+
+pub fn get_time() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs()).unwrap_or(0)
 }

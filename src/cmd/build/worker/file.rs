@@ -12,10 +12,10 @@ pub fn worker_run_file(path: PathBuf, modified: u64, id: usize, job: Job, result
     match fs::File::open(&path) {
         Ok(file) => {
             let mut reader = std::io::BufReader::new(file);
-            let mut hash = GeneralHash::from_type(arg.hash);
+            let mut hash = GeneralHash::from_type(arg.hash_type);
             let content_size;
 
-            if arg.hash == GeneralHashType::NULL {
+            if arg.hash_type == GeneralHashType::NULL {
                 // dont hash file
                 content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
             } else {

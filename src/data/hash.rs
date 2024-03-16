@@ -1,6 +1,10 @@
-use serde::{Serialize, Serializer};
+use std::fmt;
+use std::str::FromStr;
+use serde::{Deserialize, Serialize, Serializer};
+use serde::de::Error;
+use crate::utils;
 
-#[derive(Debug, Hash, PartialEq, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum GeneralHashType {
     SHA512,
     SHA256,
@@ -21,10 +25,38 @@ impl GeneralHashType {
             GeneralHashType::NULL => Box::new(null::NullHasher::new()),
         }
     }
-    
 }
 
-#[derive(Debug, Hash, PartialEq, Clone)]
+impl FromStr for GeneralHashType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "SHA512" => Ok(GeneralHashType::SHA512),
+            "SHA256" => Ok(GeneralHashType::SHA256),
+            "SHA1" => Ok(GeneralHashType::SHA1),
+            "XXH64" => Ok(GeneralHashType::XXH64),
+            "XXH32" => Ok(GeneralHashType::XXH32),
+            "NULL" => Ok(GeneralHashType::NULL),
+            _ => Err("SHA512, SHA256, SHA1, XXH64, XXH32, NULL"),
+        }
+    }
+}
+
+impl fmt::Display for GeneralHashType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GeneralHashType::SHA512 => write!(f, "SHA512"),
+            GeneralHashType::SHA256 => write!(f, "SHA256"),
+            GeneralHashType::SHA1 => write!(f, "SHA1"),
+            GeneralHashType::XXH64 => write!(f, "XXH64"),
+            GeneralHashType::XXH32 => write!(f, "XXH32"),
+            GeneralHashType::NULL => write!(f, "NULL"),
+        }
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum GeneralHash {
     SHA512([u8; 64]),
     SHA256([u8; 32]),
@@ -45,7 +77,9 @@ impl Serialize for GeneralHash {
             GeneralHash::NULL => 0,
         };
 
-        let mut hex = String::with_capacity(capacity);
+        let mut hex = String::with_capacity(capacity+1+6);
+        
+        hex.push_str((self.hash_type().to_string() + ":").as_str());
 
         match self {
             GeneralHash::SHA512(data) => for byte in data {
@@ -69,6 +103,53 @@ impl Serialize for GeneralHash {
         }
 
         serializer.serialize_str(&hex)
+    }
+}
+
+impl<'de> Deserialize<'de> for GeneralHash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+        let hex = String::deserialize(deserializer)?;
+        let mut iter = hex.split(':');
+        let hash_type = GeneralHashType::from_str(iter.next().ok_or_else(|| D::Error::custom("No hash type"))?).map_err(|err| D::Error::custom(format!("Failed to parse hash type: {}", err)))?;
+        let data = iter.next().ok_or_else(|| D::Error::custom("No hash data"))?;
+        let data = utils::decode_hex(data).map_err(|err| D::Error::custom(format!("Failed to decode hash data: {}", err)))?;
+        let mut hash = GeneralHash::from_type(hash_type);
+        match &mut hash {
+            GeneralHash::SHA512(target_data) => {
+                if data.len() != 64 {
+                    return Err(D::Error::custom("Invalid data length"));
+                }
+                target_data.copy_from_slice(&data);
+            },
+            GeneralHash::SHA256(target_data) => {
+                if data.len() != 32 {
+                    return Err(D::Error::custom("Invalid data length"));
+                }
+                target_data.copy_from_slice(&data);
+            },
+            GeneralHash::SHA1(target_data) => {
+                if data.len() != 20 {
+                    return Err(D::Error::custom("Invalid data length"));
+                }
+                target_data.copy_from_slice(&data);
+            },
+            GeneralHash::XXH64(target_data) => {
+                if data.len() != 8 {
+                    return Err(D::Error::custom("Invalid data length"));
+                }
+                target_data.copy_from_slice(&data);
+            },
+            GeneralHash::XXH32(target_data) => {
+                if data.len() != 4 {
+                    return Err(D::Error::custom("Invalid data length"));
+                }
+                target_data.copy_from_slice(&data);
+            },
+            GeneralHash::NULL => {}
+        }
+        Ok(hash)
     }
 }
 

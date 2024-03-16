@@ -20,7 +20,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, id: usize, job: Job, res
         }
     };
 
-    let mut hash = GeneralHash::from_type(arg.hash);
+    let mut hash = GeneralHash::from_type(arg.hash_type);
 
     match utils::hash_path(&target_link, &mut hash) {
         Ok(_) => {},

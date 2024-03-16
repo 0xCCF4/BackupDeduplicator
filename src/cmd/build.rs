@@ -1,8 +1,10 @@
+use std::fs;
+use std::io::{BufWriter, Write};
 use std::path::{PathBuf};
-use anyhow::{Result};
+use anyhow::{anyhow, Result};
 use serde::Serialize;
 use crate::build::worker::{worker_run, WorkerArgument};
-use crate::data::{File, FilePath, GeneralHashType, Job, PathTarget, ResultTrait};
+use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile};
 use crate::threadpool::ThreadPool;
 
 mod worker;
@@ -14,6 +16,9 @@ pub struct BuildSettings {
     pub output: PathBuf,
     pub absolute_paths: bool,
     pub threads: Option<usize>,
+    
+    pub hash_type: GeneralHashType,
+    pub continue_file: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -33,8 +38,43 @@ pub fn run(
     for _ in 0..args.capacity() {
         args.push(WorkerArgument {
             follow_symlinks: build_settings.follow_symlinks,
-            hash: GeneralHashType::NULL,
+            hash_type: build_settings.hash_type,
         });
+    }
+    
+    let existed = build_settings.output.exists();
+    
+    let mut result_file_options = fs::File::options();
+    
+    result_file_options.create(true);
+    
+    if build_settings.continue_file {
+        result_file_options.append(true).read(true);
+    } else {
+        result_file_options.write(true);
+    }
+    
+    let result_file = match result_file_options.open(build_settings.output) {
+        Ok(file) => file,
+        Err(err) => {
+            return Err(anyhow!("Failed to open result file: {}", err));
+        }
+    };
+    
+    // create buf reader and writer
+    let mut result_in = std::io::BufReader::new(&result_file);
+    let mut result_out = std::io::BufWriter::new(&result_file);
+    
+    let mut save_file = SaveFile::new();
+    match save_file.load_header(&mut result_in) {
+        Ok(_) => {},
+        Err(err) => {
+            if build_settings.continue_file && existed {
+                return Err(anyhow!("Failed to load header from result file: {}. Delete the output file or provide the --override flag to override", err));
+            } else {
+                save_file.save_header(&mut result_out)?;
+            }
+        }
     }
     
     let pool: ThreadPool<Job, JobResult> = ThreadPool::new(args, worker_run);
@@ -45,8 +85,7 @@ pub fn run(
     pool.publish(root_job);
 
     while let Ok(result) = pool.receive() {
-        // print as json
-        serde_json::to_writer_pretty(std::io::stdout(), &result)?;
+        write_file_record(&mut result_out, &result)?;
         
         if let JobResult::Final(_) = result {
             break;
@@ -56,95 +95,14 @@ pub fn run(
     return Ok(());
 }
 
-
-
-
-
-
-
-
-
-
-
-
-    
-    /*
-
-    let inside_scope = |path: &'_ Path| -> bool { true };
-    let lookup_id = |id: &'_ HandleIdentifier| -> Result<anyhow::Error> { Err(anyhow!("lookup_id")) };
-
-    let root = File::new(build_settings.directory);
-    let root = Rc::new(RefCell::new(FileContainer::InMemory(RefCell::new(root))));
-
-    let pid = std::process::id();
-    let system = sysinfo::System::new_all();
-    let current_process = system.process(Pid::from_u32(pid)).expect("Failed to get current process");
-    let current_memory_usage = current_process.memory();
-
-    println!("Current memory usage: {}", current_memory_usage);
-
-    analyze_file(Rc::clone(&root));
-
-    let system = sysinfo::System::new_all();
-    let current_process = system.process(Pid::from_u32(pid)).expect("Failed to get current process");
-
-    println!("Mem before: {}", current_memory_usage);
-    println!("Mem after:  {}", current_process.memory());
-
-    let json_str = serde_json::to_string_pretty(&root)?;
-    //println!("{}", json_str);
-
+fn write_file_record(writer: &mut BufWriter<&fs::File>, result: &JobResult) -> Result<()> {
+    let result = match result {
+        JobResult::Final(file) => file,
+        JobResult::Intermediate(file) => file,
+    };
+    let string = serde_json::to_string(result)?;
+    writer.write(string.as_bytes())?;
+    writer.write("\n".as_bytes())?;
+    writer.flush()?;
     Ok(())
 }
-
-fn analyze_file(root: Rc<RefCell<FileContainer>>) {
-    let inside_scope = |path: &'_ Path| -> bool { true };
-    let lookup_id = |id: &'_ HandleIdentifier| -> Result<anyhow::Error> { Err(anyhow!("lookup_id")) };
-
-    let mut stack = Vec::with_capacity(250);
-    stack.push(root);
-
-    while let Some(stack_next) = stack.pop() {
-        let stack_next_borrow = stack_next.borrow();
-        match stack_next_borrow.deref() {
-            FileContainer::InMemory(file) => {
-                let mut file_borrow = file.borrow_mut();
-                match file_borrow.deref_mut() {
-                    File::Directory(ref mut dir) => {
-                        if dir.children.len() == 0 {
-                            if log_enabled!(Level::Info) {
-                                info!("Analyzing directory: {:?}", dir.path);
-                            }
-
-                            dir.analyze_expand(/*true, inside_scope, lookup_id*/);
-
-                            // for all children
-                            if dir.children.len() > 0 {
-                                stack.push(Rc::clone(&stack_next));
-                                for child in dir.children.iter() {
-                                    stack.push(Rc::clone(&child));
-                                }
-                            } else {
-                                dir.analyze_collect();
-                            }
-                        } else {
-                            dir.analyze_collect();
-                        }
-                    },
-                    File::File(ref mut file) => {
-                        file.analyze();
-                    },
-                    File::Other(_) => { /* no analysis needed */ },
-                    File::Symlink(ref mut file) => {
-                        file.analyze(/*lookup_id*/);
-                    }
-                }
-            },
-            FileContainer::OnDisk(_) => {
-                todo!("Unloading files from memory to disk not yet supported");
-            },
-        }
-    }
-
-}
-*/
