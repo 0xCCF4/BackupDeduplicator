@@ -21,7 +21,6 @@ pub enum JobState {
 pub struct Job {
     id: usize,
     pub parent: Option<SharedJob>,
-    pub unfinished_children: Mutex<usize>,
     pub finished_children: Mutex<Vec<File>>,
     pub target_path: FilePath,
     pub state: JobState,
@@ -32,7 +31,6 @@ impl Job {
         Job {
             id: new_job_counter_id(),
             parent,
-            unfinished_children: Mutex::new(0),
             target_path,
             state: JobState::NotProcessed,
             finished_children: Mutex::new(Vec::new()),
@@ -41,6 +39,11 @@ impl Job {
     
     pub fn job_id(&self) -> usize {
         self.id
+    }
+
+    pub(crate) fn new_job_id(mut self) -> Self {
+        self.id = new_job_counter_id();
+        self
     }
 }
 

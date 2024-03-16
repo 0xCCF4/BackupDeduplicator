@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -49,11 +49,11 @@ impl FilePath {
         });
     }
     
-    pub fn extract_parent(&self, temp_directory: &PathBuf) {
+    pub fn extract_parent(&self, _temp_directory: &PathBuf) {
         todo!("implement")
     }
     
-    pub fn delete_parent(&self, temp_directory: &PathBuf) {
+    pub fn delete_parent(&self, _temp_directory: &PathBuf) {
         todo!("implement")
     }
     
@@ -61,7 +61,6 @@ impl FilePath {
         if self.path.len() == 1 {
             match self.path[0].target {
                 PathTarget::File => Ok(self.path[0].path.clone()),
-                _ => todo!("implement")
             }
         } else {
             todo!("implement")

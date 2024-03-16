@@ -45,6 +45,7 @@ pub enum File {
     Directory(DirectoryInformation),
     Symlink(SymlinkInformation),
     Other(OtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
+    Stub(GeneralHash), // for files that are already analyzed
 }
 
 pub type SharedFile = Arc<Mutex<File>>;
@@ -68,6 +69,7 @@ impl File {
             File::Directory(info) => &info.content_hash,
             File::Symlink(info) => &info.content_hash,
             File::Other(_) => &NULL_HASH_SHA256,
+            File::Stub(hash) => hash,
         }
     }
 

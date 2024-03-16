@@ -1,12 +1,14 @@
-use std::{fs, thread};
-use std::ops::{Deref, DerefMut};
+use std::{fs};
+use std::ops::{DerefMut};
 use std::path::{PathBuf};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, LockResult, MutexGuard};
+use std::sync::{Arc};
 use std::time::SystemTime;
 use anyhow::{anyhow, Result};
 use log::{error, info, trace, warn};
-use crate::data::{DirectoryInformation, File, FileInformation, FilePath, GeneralHash, GeneralHashType, Job, JobState, JobTrait, OtherInformation, PathTarget, ResultTrait, SymlinkInformation};
+use serde::Serialize;
+use crate::data::{DirectoryInformation, File, FileInformation, FilePath, GeneralHash, GeneralHashType, Job, JobState, OtherInformation, PathTarget, ResultTrait, SymlinkInformation};
+use crate::data::GeneralHashType::NULL;
 use crate::data::JobState::NotProcessed;
 use crate::threadpool::ThreadPool;
 use crate::utils;
@@ -20,7 +22,13 @@ pub struct BuildSettings {
     pub threads: Option<usize>,
 }
 
-impl ResultTrait for File {
+#[derive(Debug, Serialize, Clone)]
+enum JobResult {
+    Final(File),
+    Intermediate(File),
+}
+
+impl ResultTrait for JobResult {
     
 }
 
@@ -37,26 +45,30 @@ pub fn run(
     for _ in 0..args.capacity() {
         args.push(WorkerArgument {
             follow_symlinks: build_settings.follow_symlinks,
-            hash: GeneralHashType::SHA256,
+            hash: GeneralHashType::NULL,
         });
     }
     
-    let pool: ThreadPool<Job, File> = ThreadPool::new(args, worker_run);
+    let pool: ThreadPool<Job, JobResult> = ThreadPool::new(args, worker_run);
 
     let root_file = FilePath::from_path(build_settings.directory, PathTarget::File);
     let root_job = Job::new(None, root_file);
     
     pool.publish(root_job);
 
-    let result =  pool.receive()?;
+    while let Ok(result) = pool.receive() {
+        // print as json
+        serde_json::to_writer_pretty(std::io::stdout(), &result)?;
+        
+        if let JobResult::Final(_) = result {
+            break;
+        }
+    }
     
-    // print as json
-    serde_json::to_writer_pretty(std::io::stdout(), &result)?;
-
     return Ok(());
 }
 
-fn worker_publish_result(id: usize, result_publish: &Sender<File>, result: File) {
+fn worker_publish_result(id: usize, result_publish: &Sender<JobResult>, result: JobResult) {
     match result_publish.send(result) {
         Ok(_) => {},
         Err(e) => {
@@ -71,11 +83,6 @@ fn worker_create_error(path: FilePath) -> File {
     })
 }
 
-fn worker_publish_error(id: usize, result_publish: &Sender<File>, path: FilePath) {
-    let result = worker_create_error(path);
-    worker_publish_result(id, result_publish, result);
-}
-
 fn worker_publish_new_job(id: usize, job_publish: &Sender<Job>, job: Job) {
     match job_publish.send(job) {
         Ok(_) => {},
@@ -85,62 +92,47 @@ fn worker_publish_new_job(id: usize, job_publish: &Sender<Job>, job: Job) {
     }
 }
 
-fn worker_publish_result_or_trigger_parent(id: usize, result: File, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
-    let unfinished_children: usize;
+fn worker_publish_result_or_trigger_parent(id: usize, result: File, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, _arg: &mut WorkerArgument) {
     let parent_job;
 
+    let hash;
+    
     match job.parent {
         Some(parent) => {
-            parent_job = Arc::clone(&parent);
-            let parent = parent.deref();
-            match parent.unfinished_children.lock() {
-                Ok(mut unfinshed_childrens) => {
-                    let deref_mut = unfinshed_childrens.deref_mut();
-                    if *deref_mut <= 0 {
-                        error!("[{}] Parent job has no unfinished children", id);
-                        return;
-                    }
-                    *deref_mut -= 1;
-                    unfinished_children = *deref_mut;
-
-                    match parent.finished_children.lock() {
-                        Ok(mut finished_children) => {
-                            finished_children.push(result);
-                        },
-                        Err(e) => {
-                            error!("[{}] failed to lock finished children: {}", id, e);
-                            return;
-                        }
-                    }
-                },
-                Err(e) => {
-                    error!("[{}] failed to lock children count: {}", id, e);
-                    return;
-                }
-            }
+            parent_job = parent;
+            hash = result.get_content_hash().to_owned();
+            worker_publish_result(id, result_publish, JobResult::Intermediate(result));
         },
         None => {
-            worker_publish_result(id, result_publish, result);
+            worker_publish_result(id, result_publish, JobResult::Final(result));
             return;
         },
     }
     
+    match parent_job.finished_children.lock() {
+        Ok(mut finished) => {
+            finished.push(File::Stub(hash));
+        },
+        Err(err) => {
+            error!("[{}] failed to lock finished children: {}", id, err);
+        }
+    }
+    
     let target_peth = job.target_path;
 
-    if unfinished_children <= 0 {
-        match Arc::into_inner(parent_job) {
-            Some(parent_job) => {
-                worker_publish_new_job(id, job_publish, parent_job);
-            },
-            None => {
-                error!("[{}] failed to convert parent job", id);
-                worker_publish_error(id, result_publish, target_peth);
-            }
+    match Arc::into_inner(parent_job) {
+        Some(parent_job) => {
+            trace!("[{}] finished last child of parent {:?}", id, &target_peth);
+            let parent_job= parent_job.new_job_id();
+            worker_publish_new_job(id, job_publish, parent_job);
+        },
+        None => {
+            trace!("[{}] there are still open job, skip parent", id);
         }
     }
 }
 
-fn worker_run_symlink(path: PathBuf, modified: u64, id: usize, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+fn worker_run_symlink(path: PathBuf, modified: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing symlink {:?}#{:?}", id, &job.target_path, path);
     let target_link = fs::read_link(&path);
     let target_link = match target_link {
@@ -173,7 +165,7 @@ fn worker_run_symlink(path: PathBuf, modified: u64, id: usize, job: Job, result_
     worker_publish_result_or_trigger_parent(id, file, job, result_publish, job_publish, arg);
 }
 
-fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {:?}#{:?}", id, &job.target_path, path);
     match job.state {
         NotProcessed => {
@@ -202,22 +194,6 @@ fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, r
             }
 
             job.state = JobState::Analyzed;
-            let error;
-            match job.unfinished_children.lock() {
-                Ok(mut unfinished_children) => {
-                    *unfinished_children = children.len();
-                    error = false;
-                },
-                Err(e) => {
-                    error = true;
-                    error!("[{}] failed to lock children count: {}", id, e);
-                    return;
-                }
-            }
-            if error {
-                worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
-                return;
-            }
             
             let parent_job = Arc::new(job);
             let mut jobs = Vec::with_capacity(children.len());
@@ -260,7 +236,7 @@ fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, r
                     error = true;
                 }
             }
-            if (error) {
+            if error {
                 worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
                 return;
             }
@@ -278,21 +254,27 @@ fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, r
     }
 }
 
-fn worker_run_file(path: PathBuf, modified: u64, id: usize, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+fn worker_run_file(path: PathBuf, modified: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {:?}#{:?}", id, &job.target_path, path);
     match fs::File::open(&path) {
         Ok(file) => {
             let mut reader = std::io::BufReader::new(file);
             let mut hash = GeneralHash::from_type(arg.hash);
             let content_size;
-            match utils::hash_file(&mut reader, &mut hash) {
-                Ok(size) => {
-                    content_size = size;
-                }
-                Err(err) => {
-                    error!("Error while hashing file {:?}: {}", path, err);
-                    worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
-                    return;
+            
+            if arg.hash == NULL {
+                // dont hash file
+                content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
+            } else {
+                match utils::hash_file(&mut reader, &mut hash) {
+                    Ok(size) => {
+                        content_size = size;
+                    }
+                    Err(err) => {
+                        error!("Error while hashing file {:?}: {}", path, err);
+                        worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+                        return;
+                    }
                 }
             }
 
@@ -313,16 +295,16 @@ fn worker_run_file(path: PathBuf, modified: u64, id: usize, job: Job, result_pub
     }
 }
 
-fn worker_run_other(path: PathBuf, modified: u64, id: usize, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+fn worker_run_other(path: PathBuf, _modified: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing other {:?}#{:?}", id, &job.target_path, path);
     let file = File::Other(OtherInformation {
         path: job.target_path.clone(),
     });
 
-    worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+    worker_publish_result_or_trigger_parent(id, file, job, result_publish, job_publish, arg);
 }
 
-fn worker_run(id: usize, job: Job, result_publish: &Sender<File>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     let path = job.target_path.resolve_file();
     let path = match path {
         Ok(file) => file,

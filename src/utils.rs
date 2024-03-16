@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use anyhow::{Result};
-use sha2::Digest;
 use crate::data::{File, GeneralHash};
 
 pub trait LexicalAbsolute {
@@ -28,9 +27,7 @@ impl LexicalAbsolute for PathBuf {
 pub fn hash_file<T>(mut reader: T, hash: &mut GeneralHash) -> Result<u64>
 where T: std::io::Read {
 
-    let mut hasher = match hash {
-        GeneralHash::SHA256(_) => sha2::Sha256::new(),
-    };
+    let mut hasher = hash.hasher();
     let mut buffer = [0; 1024];
     let mut content_size = 0;
 
@@ -40,45 +37,35 @@ where T: std::io::Read {
         if bytes_read == 0 {
             break;
         }
-        Digest::update(&mut hasher, &buffer[..bytes_read]);
+        hasher.update(&buffer[..bytes_read]);
     }
 
-    *hash = match hash {
-        GeneralHash::SHA256(_) => GeneralHash::SHA256(hasher.finalize().into()),
-    };
+    *hash = hasher.finalize();
 
     Ok(content_size)
 }
 
 pub fn hash_directory<'a>(children: impl Iterator<Item = &'a File>, hash: &mut GeneralHash) -> Result<u64> {
-    let mut hasher = match hash {
-        GeneralHash::SHA256(_) => sha2::Sha256::new(),
-    };
+    let mut hasher = hash.hasher();
 
     let mut content_size = 0;
 
     for child in children {
         content_size += 1;
-        Digest::update(&mut hasher, child.get_content_hash().as_bytes());
+        hasher.update(child.get_content_hash().as_bytes());
     }
 
-    *hash = match hash {
-        GeneralHash::SHA256(_) => GeneralHash::SHA256(hasher.finalize().into()),
-    };
+    *hash = hasher.finalize();
 
     Ok(content_size)
 }
 
 pub fn hash_path(path: &Path, hash: &mut GeneralHash) -> Result<()> {
-    let mut hasher = match hash {
-        GeneralHash::SHA256(_) => sha2::Sha256::new(),
-    };
+    let mut hasher = hash.hasher();
 
-    Digest::update(&mut hasher, path.as_os_str().as_encoded_bytes());
+    hasher.update(path.as_os_str().as_encoded_bytes());
 
-    *hash = match hash {
-        GeneralHash::SHA256(_) => GeneralHash::SHA256(hasher.finalize().into()),
-    };
+    *hash = hasher.finalize();
 
     Ok(())
 }
