@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::fs;
-use std::io::{BufWriter, Write};
 use std::path::{PathBuf};
+use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use crate::build::worker::{worker_run, WorkerArgument};
-use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile};
+use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryV1Ref, SaveFileEntryV1};
 use crate::threadpool::ThreadPool;
 
 mod worker;
@@ -34,16 +35,7 @@ impl ResultTrait for JobResult {
 pub fn run(
     build_settings: BuildSettings,
 ) -> Result<()> {
-    let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(|| num_cpus::get()));
-    for _ in 0..args.capacity() {
-        args.push(WorkerArgument {
-            follow_symlinks: build_settings.follow_symlinks,
-            hash_type: build_settings.hash_type,
-        });
-    }
-    
     let existed = build_settings.output.exists();
-    
     let mut result_file_options = fs::File::options();
     
     result_file_options.create(true);
@@ -65,16 +57,43 @@ pub fn run(
     let mut result_in = std::io::BufReader::new(&result_file);
     let mut result_out = std::io::BufWriter::new(&result_file);
     
-    let mut save_file = SaveFile::new();
-    match save_file.load_header(&mut result_in) {
+    let mut save_file = SaveFile::new(&mut result_out, &mut result_in, false, true);
+    match save_file.load_header() {
         Ok(_) => {},
         Err(err) => {
             if build_settings.continue_file && existed {
                 return Err(anyhow!("Failed to load header from result file: {}. Delete the output file or provide the --override flag to override", err));
             } else {
-                save_file.save_header(&mut result_out)?;
+                save_file.save_header()?;
             }
         }
+    }
+    
+    match save_file.load_all_entries() {
+        Ok(_) => {},
+        Err(err) => {
+            return Err(anyhow!("Failed to load entries from result file: {}. Delete the output file or provide the --override flag to override", err));
+        }
+    }
+
+    // dont need hash -> file mapping
+    save_file.empty_file_by_hash();
+    
+    let mut file_by_hash: HashMap<FilePath, SaveFileEntryV1> = HashMap::with_capacity(save_file.file_by_hash.len());
+    save_file.file_by_path.drain().for_each(|(k, v)| {
+        file_by_hash.insert(k, Arc::into_inner(v).expect("There should be no further references to the entry"));
+    });
+    let file_by_hash = Arc::new(file_by_hash);
+
+    // create thread pool
+
+    let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(|| num_cpus::get()));
+    for _ in 0..args.capacity() {
+        args.push(WorkerArgument {
+            follow_symlinks: build_settings.follow_symlinks,
+            hash_type: build_settings.hash_type,
+            save_file_by_path: Arc::clone(&file_by_hash),
+        });
     }
     
     let pool: ThreadPool<Job, JobResult> = ThreadPool::new(args, worker_run);
@@ -85,9 +104,22 @@ pub fn run(
     pool.publish(root_job);
 
     while let Ok(result) = pool.receive() {
-        write_file_record(&mut result_out, &result)?;
+        let finished;
+        let result = match result {
+            JobResult::Intermediate(inner) => {
+                finished = false;
+                inner
+            },
+            JobResult::Final(inner) => {
+                finished = true;
+                inner
+            }
+        };
         
-        if let JobResult::Final(_) = result {
+        let entry = SaveFileEntryV1Ref::from(&result);
+        save_file.write_entry_ref(&entry)?;
+        
+        if finished {
             break;
         }
     }
@@ -95,14 +127,4 @@ pub fn run(
     return Ok(());
 }
 
-fn write_file_record(writer: &mut BufWriter<&fs::File>, result: &JobResult) -> Result<()> {
-    let result = match result {
-        JobResult::Final(file) => file,
-        JobResult::Intermediate(file) => file,
-    };
-    let string = serde_json::to_string(result)?;
-    writer.write(string.as_bytes())?;
-    writer.write("\n".as_bytes())?;
-    writer.flush()?;
-    Ok(())
-}
+

@@ -208,6 +208,3 @@ mod sha1;
 mod sha2;
 mod xxh;
 mod null;
-
-
-pub static NULL_HASH_SHA256: GeneralHash = GeneralHash::SHA256([0; 32]);

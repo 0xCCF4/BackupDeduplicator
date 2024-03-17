@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
@@ -9,7 +10,7 @@ use crate::build::worker::directory::worker_run_directory;
 use crate::build::worker::file::worker_run_file;
 use crate::build::worker::other::worker_run_other;
 use crate::build::worker::symlink::worker_run_symlink;
-use crate::data::{File, FilePath, GeneralHashType, Job, OtherInformation, StubInformation};
+use crate::data::{File, FilePath, GeneralHashType, Job, OtherInformation, SaveFileEntryV1, StubInformation};
 
 mod directory;
 mod file;
@@ -19,6 +20,7 @@ mod symlink;
 pub struct WorkerArgument {
     pub follow_symlinks: bool,
     pub hash_type: GeneralHashType,
+    pub save_file_by_path: Arc<HashMap<FilePath, SaveFileEntryV1>>,
 }
 
 pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {

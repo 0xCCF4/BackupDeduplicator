@@ -1,6 +1,6 @@
 use std::path::{PathBuf};
 use serde::{Deserialize, Serialize};
-use crate::data::{FilePath, GeneralHash, NULL_HASH_SHA256};
+use crate::data::{FilePath, GeneralHash};
 
 // type ResolveNodeFn = fn(&HandleIdentifier) -> Result<Rc<RefCell<FileContainer>>>;
 // type PathInScopeFn = fn(&Path) -> bool;
@@ -56,22 +56,12 @@ pub enum File {
 // ---- IMPLEMENTATION ----
 
 impl File {
-    /*
-    pub fn id(&self) -> &HandleIdentifier {
-        match self {
-            File::File(info) => &info.id,
-            File::Directory(info) => &info.id,
-            File::Symlink(info) => &info.id,
-            File::Other(_) => &NULL_HANDLE,
-        }
-    }*/
-
     pub fn get_content_hash(&self) -> &GeneralHash {
         match self {
             File::File(info) => &info.content_hash,
             File::Directory(info) => &info.content_hash,
             File::Symlink(info) => &info.content_hash,
-            File::Other(_) => &NULL_HASH_SHA256,
+            File::Other(_) => &GeneralHash::NULL,
             File::Stub(info) => &info.content_hash,
         }
     }
@@ -114,36 +104,3 @@ impl File {
         }
     }
 }
-
-/*
-impl FileContainer {
-    #[deprecated]
-    pub fn id(&self) -> HandleIdentifier {
-        match self {
-            FileContainer::InMemory(file) => file.borrow().id().clone(),
-            // FileContainer::OnDisk(id) => id.clone(),
-        }
-    }
-
-    pub fn has_finished_analyzing(&self) -> bool {
-        match self {
-            FileContainer::InMemory(file) => file.borrow().has_finished_analyzing(),
-            // FileContainer::OnDisk(_) => true, // files loaded out of memory are assumed to be fully processed
-        }
-    }
-
-    pub fn has_errored(&self) -> bool {
-        match self {
-            FileContainer::InMemory(file) => match file.borrow().deref() {
-                File::File(info) => matches!(info.state, FileState::Error),
-                File::Directory(info) => matches!(info.state, DirectoryState::Error),
-                File::Symlink(info) => matches!(info.state, SymlinkState::Error),
-                File::Other(_) => false,
-            },
-            // FileContainer::OnDisk(_) => false, // files loaded out of memory are assumed to be fully processed
-        }
-    }
-}
-
- */
-

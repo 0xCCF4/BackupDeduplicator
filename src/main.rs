@@ -44,7 +44,7 @@ enum Command {
         #[arg(long)]
         follow_symlinks: bool,
         /// Output hash tree to the given file
-        #[arg(short, long, default_value = "hash_tree.json")]
+        #[arg(short, long, default_value = "hash_tree.bdd")]
         output: String,
         /// Absolute paths, if set, the tool will output absolute paths in the hash tree.
         /// If not set, the tool will output relative paths to the current working directory.
@@ -68,7 +68,7 @@ enum Command {
         #[arg()]
         directory: String,
         /// The hash tree file to update
-        #[arg(short, long, default_value = "hash_tree.json")]
+        #[arg(short, long, default_value = "hash_tree.bdd")]
         input: String,
         /// Traverse into archives
         #[arg(short, long)]
@@ -80,7 +80,7 @@ enum Command {
     /// Find duplicates and output them as analysis result
     Analyze {
         /// The hash tree file to analyze
-        #[arg(short, long, default_value = "hash_tree.json")]
+        #[arg(short, long, default_value = "hash_tree.bdd")]
         input: String,
         /// Output file for the analysis result
         #[arg(short, long, default_value = "analysis.json")]
