@@ -9,8 +9,9 @@ use crate::build::worker::{worker_create_error, worker_publish_result_or_trigger
 use crate::data::{DirectoryInformation, File, GeneralHash, Job, JobState};
 use crate::utils;
 
-pub fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {:?}#{:?}", id, &job.target_path, path);
+    
     match job.state {
         JobState::NotProcessed => {
             let read_dir = fs::read_dir(&path);
@@ -18,7 +19,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Jo
                 Ok(read_dir) => read_dir,
                 Err(err) => {
                     error!("Error while reading directory {:?}: {}", path, err);
-                    worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+                    worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
                     return;
                 }
             };
@@ -81,7 +82,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Jo
                 }
             }
             if error {
-                worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+                worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
                 return;
             }
 
@@ -93,7 +94,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, id: usize, mut job: Jo
                 children,
             });
 
-            worker_publish_result_or_trigger_parent(id, file, job, result_publish, job_publish, arg);
+            worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
         }
     }
 }

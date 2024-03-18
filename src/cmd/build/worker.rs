@@ -10,7 +10,7 @@ use crate::build::worker::directory::worker_run_directory;
 use crate::build::worker::file::worker_run_file;
 use crate::build::worker::other::worker_run_other;
 use crate::build::worker::symlink::worker_run_symlink;
-use crate::data::{File, FilePath, GeneralHashType, Job, OtherInformation, SaveFileEntryV1, StubInformation};
+use crate::data::{File, FilePath, GeneralHashType, Job, OtherInformation, SaveFileEntry, StubInformation};
 
 mod directory;
 mod file;
@@ -20,7 +20,7 @@ mod symlink;
 pub struct WorkerArgument {
     pub follow_symlinks: bool,
     pub hash_type: GeneralHashType,
-    pub save_file_by_path: Arc<HashMap<FilePath, SaveFileEntryV1>>,
+    pub save_file_by_path: Arc<HashMap<FilePath, SaveFileEntry>>,
 }
 
 pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
@@ -30,7 +30,7 @@ pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_p
         Err(e) => {
             error!("[{}] failed to resolve file: {}", id, e);
             info!("[{}] Skipping file...", id);
-            worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+            worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), 0, 0), job, result_publish, job_publish, arg);
             return;
         }
     };
@@ -45,7 +45,7 @@ pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_p
         Err(e) => {
             warn!("[{}] failed to read metadata: {}", id, e);
             info!("[{}] Skipping file...", id);
-            worker_publish_result_or_trigger_parent(id, worker_create_error(job.target_path.clone()), job, result_publish, job_publish, arg);
+            worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), 0, 0), job, result_publish, job_publish, arg);
             return;
         }
     };
@@ -60,7 +60,9 @@ pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_p
     });
 
     let modified;
-
+    
+    let size = metadata.len();
+    
     match modified_result {
         Ok(time) => modified = time,
         Err(err) => {
@@ -70,13 +72,13 @@ pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_p
     }
 
     if metadata.is_symlink() {
-        worker_run_symlink(path, modified, id, job, result_publish, job_publish, arg);
+        worker_run_symlink(path, modified, size, id, job, result_publish, job_publish, arg);
     } else if metadata.is_dir() {
-        worker_run_directory(path, modified, id, job, result_publish, job_publish, arg);
+        worker_run_directory(path, modified, size, id, job, result_publish, job_publish, arg);
     } else if metadata.is_file() {
-        worker_run_file(path, modified, id, job, result_publish, job_publish, arg);
+        worker_run_file(path, modified, size, id, job, result_publish, job_publish, arg);
     } else {
-        worker_run_other(path, modified, id, job, result_publish, job_publish, arg);
+        worker_run_other(path, modified, size, id, job, result_publish, job_publish, arg);
     }
 }
 
@@ -89,9 +91,11 @@ fn worker_publish_result(id: usize, result_publish: &Sender<JobResult>, result: 
     }
 }
 
-fn worker_create_error(path: FilePath) -> File {
+fn worker_create_error(path: FilePath, modified: u64, size: u64) -> File {
     File::Other(OtherInformation {
         path,
+        modified,
+        content_size: size,
     })
 }
 
@@ -104,7 +108,7 @@ fn worker_publish_new_job(id: usize, job_publish: &Sender<Job>, job: Job) {
     }
 }
 
-fn worker_publish_result_or_trigger_parent(id: usize, result: File, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, _arg: &mut WorkerArgument) {
+fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: File, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, _arg: &mut WorkerArgument) {
     let parent_job;
 
     let hash;
@@ -113,7 +117,10 @@ fn worker_publish_result_or_trigger_parent(id: usize, result: File, job: Job, re
         Some(parent) => {
             parent_job = parent;
             hash = result.get_content_hash().to_owned();
-            worker_publish_result(id, result_publish, JobResult::Intermediate(result));
+            worker_publish_result(id, result_publish, match cached {
+                false => JobResult::Intermediate(result),
+                true => JobResult::Cached(result)
+            });
         },
         None => {
             worker_publish_result(id, result_publish, JobResult::Final(result));
@@ -143,4 +150,8 @@ fn worker_publish_result_or_trigger_parent(id: usize, result: File, job: Job, re
             trace!("[{}] there are still open job, skip parent", id);
         }
     }
+}
+
+fn worker_fetch_savedata<'a, 'b>(args: &'a WorkerArgument, path: &'b FilePath) -> Option<&'a SaveFileEntry> {
+    args.save_file_by_path.get(path)
 }

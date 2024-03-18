@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use crate::build::worker::{worker_run, WorkerArgument};
-use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryV1Ref, SaveFileEntryV1};
+use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryV1Ref, SaveFileEntry, SaveFileEntryType};
 use crate::threadpool::ThreadPool;
 
 mod worker;
@@ -26,6 +26,7 @@ pub struct BuildSettings {
 enum JobResult {
     Final(File),
     Intermediate(File),
+    Cached(File),
 }
 
 impl ResultTrait for JobResult {
@@ -57,7 +58,7 @@ pub fn run(
     let mut result_in = std::io::BufReader::new(&result_file);
     let mut result_out = std::io::BufWriter::new(&result_file);
     
-    let mut save_file = SaveFile::new(&mut result_out, &mut result_in, false, true);
+    let mut save_file = SaveFile::new(&mut result_out, &mut result_in, false, true, false);
     match save_file.load_header() {
         Ok(_) => {},
         Err(err) => {
@@ -78,8 +79,9 @@ pub fn run(
 
     // dont need hash -> file mapping
     save_file.empty_file_by_hash();
+    save_file.empty_entry_list();
     
-    let mut file_by_hash: HashMap<FilePath, SaveFileEntryV1> = HashMap::with_capacity(save_file.file_by_hash.len());
+    let mut file_by_hash: HashMap<FilePath, SaveFileEntry> = HashMap::with_capacity(save_file.file_by_hash.len());
     save_file.file_by_path.drain().for_each(|(k, v)| {
         file_by_hash.insert(k, Arc::into_inner(v).expect("There should be no further references to the entry"));
     });
@@ -105,19 +107,32 @@ pub fn run(
 
     while let Ok(result) = pool.receive() {
         let finished;
+        let save_cache;
         let result = match result {
             JobResult::Intermediate(inner) => {
                 finished = false;
+                save_cache = true;
                 inner
             },
             JobResult::Final(inner) => {
                 finished = true;
+                save_cache = true;
+                inner
+            },
+            JobResult::Cached(inner) => {
+                finished = false;
+                save_cache = false;
                 inner
             }
         };
         
-        let entry = SaveFileEntryV1Ref::from(&result);
-        save_file.write_entry_ref(&entry)?;
+        if save_cache {
+            let entry = SaveFileEntryV1Ref::from(&result);
+            match entry.file_type {
+                SaveFileEntryType::Directory => {},
+                _ => { save_file.write_entry_ref(&entry)?; }
+            }
+        }
         
         if finished {
             break;

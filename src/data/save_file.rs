@@ -28,39 +28,46 @@ pub enum SaveFileEntryTypeV1 {
     Symlink,
     Other,
 }
+pub use SaveFileEntryTypeV1 as SaveFileEntryType;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct SaveFileEntryV1 {
     pub file_type: SaveFileEntryTypeV1,
     pub modified: u64,
+    pub size: u64,
     pub hash: GeneralHash,
     pub path: FilePath,
 }
+pub use SaveFileEntryV1 as SaveFileEntry;
 
 #[derive(Debug, Serialize)]
 pub struct SaveFileEntryV1Ref<'a> {
     pub file_type: &'a SaveFileEntryTypeV1,
     pub modified: &'a u64,
+    pub size: &'a u64,
     pub hash: &'a GeneralHash,
     pub path: &'a FilePath,
 }
+pub type SaveFileEntryRef<'a> = SaveFileEntryV1Ref<'a>;
 
 pub mod converter;
 
 pub struct SaveFile<'a, W, R> where W: Write, R: BufRead {
     pub header: SaveFileHeaders,
-    pub file_by_hash: HashMap<GeneralHash, Vec<Arc<SaveFileEntryV1>>>,
-    pub file_by_path: HashMap<FilePath, Arc<SaveFileEntryV1>>,
+    pub file_by_hash: HashMap<GeneralHash, Vec<Arc<SaveFileEntry>>>,
+    pub file_by_path: HashMap<FilePath, Arc<SaveFileEntry>>,
+    pub all_entries: Vec<Arc<SaveFileEntry>>,
     
     enable_file_by_hash: bool,
     enable_file_by_path: bool,
+    enable_all_entry_list: bool,
     
     writer: &'a mut W,
     reader: &'a mut R,
 }
 
 impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
-    pub fn new(writer: &'a mut W, reader: &'a mut R, enable_file_by_hash: bool, enable_file_by_path: bool) -> Self {
+    pub fn new(writer: &'a mut W, reader: &'a mut R, enable_file_by_hash: bool, enable_file_by_path: bool, enable_all_entry_list: bool) -> Self {
         let time = utils::get_time();
         SaveFile {
             header: SaveFileHeaders {
@@ -70,8 +77,10 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
             },
             file_by_hash: HashMap::new(),
             file_by_path: HashMap::new(),
+            all_entries: Vec::new(),
             enable_file_by_hash,
             enable_file_by_path,
+            enable_all_entry_list,
             writer,
             reader,
         }
@@ -95,7 +104,7 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         Ok(())
     }
     
-    pub fn load_entry(&mut self) -> Result<Option<Arc<SaveFileEntryV1>>> {
+    pub fn load_entry(&mut self) -> Result<Option<Arc<SaveFileEntry>>> {
         loop {
             let mut entry_str = String::new();
             let count = self.reader.read_line(&mut entry_str)?;
@@ -104,11 +113,11 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
                 return Ok(None);
             }
 
-            let entry: SaveFileEntryV1 = serde_json::from_str(entry_str.as_str())?;
+            let entry: SaveFileEntry = serde_json::from_str(entry_str.as_str())?;
 
             let hash = entry.hash.clone();
 
-            if hash.hash_type() != self.header.hash_type && !(entry.file_type == SaveFileEntryTypeV1::Other && entry.hash.hash_type() == GeneralHashType::NULL) {
+            if hash.hash_type() != self.header.hash_type && !(entry.file_type == SaveFileEntryType::Other && entry.hash.hash_type() == GeneralHashType::NULL) {
                 warn!("Hash type mismatch ignoring entry: {:?}", entry.path);
                 continue;
             }
@@ -125,9 +134,16 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
                 match self.file_by_path.insert(path, Arc::clone(&shared_entry)) {
                     None => {}
                     Some(old) => {
-                        warn!("Duplicate entry for path: {:?}", old.path);
+                        warn!("Duplicate entry for path: {:?}", &old.path);
+                        if self.enable_all_entry_list {
+                            self.all_entries.retain(|x| x != &old);
+                        }
                     }
                 }
+            }
+
+            if self.enable_all_entry_list {
+                self.all_entries.push(Arc::clone(&shared_entry));
             }
 
             return Ok(Some(shared_entry))
@@ -164,5 +180,10 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
     pub fn empty_file_by_path(&mut self) {
         self.file_by_path.clear();
         self.file_by_path.shrink_to_fit();
+    }
+
+    pub fn empty_entry_list(&mut self) {
+        self.all_entries.clear();
+        self.all_entries.shrink_to_fit();
     }
 }

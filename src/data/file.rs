@@ -30,11 +30,14 @@ pub struct SymlinkInformation {
     pub modified: u64,
     pub content_hash: GeneralHash, // equal to the target file's hash or if not following symlinks, the symlink's path hashed
     pub target: PathBuf,
+    pub content_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OtherInformation {
     pub path: FilePath,
+    pub modified: u64,
+    pub content_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

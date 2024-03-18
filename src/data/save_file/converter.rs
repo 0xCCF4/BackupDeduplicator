@@ -5,6 +5,7 @@ impl From<FileInformation> for SaveFileEntryV1 {
         SaveFileEntryV1 {
             file_type: SaveFileEntryTypeV1::File,
             modified: value.modified,
+            size: value.content_size,
             hash: value.content_hash,
             path: value.path
         }
@@ -16,6 +17,7 @@ impl From<SymlinkInformation> for SaveFileEntryV1 {
         SaveFileEntryV1 {
             file_type: SaveFileEntryTypeV1::Symlink,
             modified: value.modified,
+            size: value.content_size,
             hash: value.content_hash,
             path: value.path
         }
@@ -27,6 +29,7 @@ impl From<DirectoryInformation> for SaveFileEntryV1 {
         SaveFileEntryV1 {
             file_type: SaveFileEntryTypeV1::Directory,
             modified: value.modified,
+            size: value.number_of_children,
             hash: value.content_hash,
             path: value.path
         }
@@ -37,7 +40,8 @@ impl From<OtherInformation> for SaveFileEntryV1 {
     fn from(value: OtherInformation) -> Self {
         SaveFileEntryV1 {
             file_type: SaveFileEntryTypeV1::Other,
-            modified: 0,
+            modified: value.modified,
+            size: value.content_size,
             hash: GeneralHash::NULL,
             path: value.path
         }
@@ -49,6 +53,7 @@ impl From<StubInformation> for SaveFileEntryV1 {
         SaveFileEntryV1 {
             file_type: SaveFileEntryTypeV1::Other,
             modified: 0,
+            size: 0,
             hash: value.content_hash,
             path: value.path
         }
@@ -61,7 +66,8 @@ impl<'a> From<&'a FileInformation> for SaveFileEntryV1Ref<'a> {
             file_type: &SaveFileEntryTypeV1::File,
             modified: &value.modified,
             hash: &value.content_hash,
-            path: &value.path
+            path: &value.path,
+            size: &value.content_size,
         }
     }
 }
@@ -72,7 +78,8 @@ impl<'a> From<&'a SymlinkInformation> for SaveFileEntryV1Ref<'a> {
             file_type: &SaveFileEntryTypeV1::Symlink,
             modified: &value.modified,
             hash: &value.content_hash,
-            path: &value.path
+            path: &value.path,
+            size: &value.content_size,
         }
     }
 }
@@ -83,7 +90,8 @@ impl<'a> From<&'a DirectoryInformation> for SaveFileEntryV1Ref<'a> {
             file_type: &SaveFileEntryTypeV1::Directory,
             modified: &value.modified,
             hash: &value.content_hash,
-            path: &value.path
+            path: &value.path,
+            size: &value.number_of_children,
         }
     }
 }
@@ -94,7 +102,8 @@ impl<'a> From<&'a OtherInformation> for SaveFileEntryV1Ref<'a> {
             file_type: &SaveFileEntryTypeV1::Other,
             modified: &0,
             hash: &GeneralHash::NULL,
-            path: &value.path
+            path: &value.path,
+            size: &value.content_size,
         }
     }
 }
@@ -105,7 +114,8 @@ impl<'a> From<&'a StubInformation> for SaveFileEntryV1Ref<'a> {
             file_type: &SaveFileEntryTypeV1::Other,
             modified: &0,
             hash: &value.content_hash,
-            path: &value.path
+            path: &value.path,
+            size: &0,
         }
     }
 }
@@ -141,6 +151,7 @@ impl<'a> From<&'a SaveFileEntryV1> for SaveFileEntryV1Ref<'a> {
             modified: &value.modified,
             hash: &value.hash,
             path: &value.path,
+            size: &value.size,
         }
     }
 }
