@@ -29,7 +29,7 @@ pub fn hash_file<T>(mut reader: T, hash: &mut GeneralHash) -> Result<u64>
 where T: std::io::Read {
 
     let mut hasher = hash.hasher();
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; 4096];
     let mut content_size = 0;
 
     loop {

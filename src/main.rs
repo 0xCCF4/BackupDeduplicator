@@ -3,6 +3,8 @@ use std::str::FromStr;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, LevelFilter, trace};
 use backup_deduplicator::build::BuildSettings;
+use backup_deduplicator::clean;
+use backup_deduplicator::clean::CleanSettings;
 use backup_deduplicator::data::GeneralHashType;
 use backup_deduplicator::utils::LexicalAbsolute;
 
@@ -59,7 +61,24 @@ enum Command {
         /// Hash algorithm to use
         #[arg(long="hash", default_value = "sha256")]
         hash_type: String,
+        /// Disable database clean after run, if set the tool will not clean the database after the creation
+        #[arg(long="noclean", default_value = "false")]
+        no_clean: bool,
     },
+    Clean {
+        /// The hash tree file to clean
+        #[arg(short, long, default_value = "hash_tree.bdd")]
+        input: String,
+        /// The directory to clean
+        #[arg(short, long, default_value = "hash_tree.bdd")]
+        output: String,
+        /// Overwrite the output file
+        #[arg(long="overwrite", default_value = "false")]
+        overwrite: bool,
+        /// Root directory, if set remove all files that are not subfiles of this directory
+        #[arg(long)]
+        root: Option<String>,
+    }
     /*
     /// Update a hash-tree with the given directory
     /// This command will update by checking if the file sizes or modification times have changed.
@@ -130,7 +149,8 @@ fn main() {
             absolute_paths,
             working_directory,
             recreate_output,
-            hash_type
+            hash_type,
+            no_clean
         } => {
             debug!("Running build command");
             
@@ -241,7 +261,7 @@ fn main() {
                 directory: directory.to_path_buf(),
                 into_archives: archives,
                 follow_symlinks,
-                output,
+                output: output.clone(),
                 absolute_paths,
                 threads: args.threads,
                 continue_file: !recreate_output,
@@ -249,6 +269,72 @@ fn main() {
             }) {
                 Ok(_) => {
                     info!("Build command completed successfully");
+                    
+                    if !no_clean {
+                        info!("Executing clean command");
+                        match clean::run(CleanSettings {
+                            input: output.clone(),
+                            output: output,
+                            root: None
+                        }) {
+                            Ok(_) => {
+                                info!("Clean command completed successfully");
+                                std::process::exit(exitcode::OK);
+                            }
+                            Err(e) => {
+                                eprintln!("Error: {:?}", e);
+                                std::process::exit(exitcode::SOFTWARE);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {:?}", e);
+                    std::process::exit(exitcode::SOFTWARE);
+                }
+            }
+        },
+        Command::Clean {
+            input,
+            output,
+            overwrite,
+            root,
+        } => {
+            let input = std::path::Path::new(&input);
+            let output = std::path::Path::new(&output);
+            
+            let input = match input.to_path_buf().to_lexical_absolute() {
+                Ok(out) => out,
+                Err(e) => {
+                    eprintln!("IO error, could not resolve output file: {:?}", e);
+                    std::process::exit(exitcode::CONFIG);
+                }
+            };
+            let output = match output.to_path_buf().to_lexical_absolute() {
+                Ok(out) => out,
+                Err(e) => {
+                    eprintln!("IO error, could not resolve output file: {:?}", e);
+                    std::process::exit(exitcode::CONFIG);
+                }
+            };
+            
+            if !input.exists() {
+                eprintln!("Input file does not exist: {:?}", input);
+                std::process::exit(exitcode::CONFIG);
+            }
+            
+            if output.exists() && !overwrite {
+                eprintln!("Output file already exists: {:?}. Set --override to override its content", output);
+                std::process::exit(exitcode::CONFIG);
+            }
+            
+            match backup_deduplicator::clean::run(CleanSettings {
+                input,
+                output,
+                root
+            }) {
+                Ok(_) => {
+                    info!("Clean command completed successfully");
                     std::process::exit(exitcode::OK);
                 }
                 Err(e) => {

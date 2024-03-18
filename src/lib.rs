@@ -4,6 +4,7 @@ pub mod utils;
 
 mod cmd {
     pub mod build;
+    pub mod clean;
 }
 pub use cmd::*;
 

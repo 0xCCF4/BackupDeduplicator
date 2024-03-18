@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
+use std::ops::DerefMut;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -64,8 +66,9 @@ pub struct SaveFile<'a, W, R> where W: Write, R: BufRead {
     enable_file_by_path: bool,
     enable_all_entry_list: bool,
     
-    writer: &'a mut W,
-    reader: &'a mut R,
+    writer: RefCell<&'a mut W>,
+    written_bytes: RefCell<usize>,
+    reader: RefCell<&'a mut R>,
 }
 
 impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
@@ -83,22 +86,23 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
             enable_file_by_hash,
             enable_file_by_path,
             enable_all_entry_list,
-            writer,
-            reader,
+            writer: RefCell::new(writer),
+            reader: RefCell::new(reader),
+            written_bytes: RefCell::new(0),
         }
     }
     
-    pub fn save_header(&mut self) -> Result<()> {
+    pub fn save_header(&self) -> Result<()> {
         let header_str = serde_json::to_string(&self.header)?;
-        self.writer.write(header_str.as_bytes())?;
-        self.writer.write(b"\n")?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write(header_str.as_bytes())?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write(b"\n")?;
         
         Ok(())
     }
     
     pub fn load_header(&mut self) -> Result<()> {
         let mut header_str = String::new();
-        self.reader.read_line(&mut header_str)?;
+        self.reader.borrow_mut().deref_mut().read_line(&mut header_str)?;
         
         let header: SaveFileHeaders = serde_json::from_str(header_str.as_str())?;
         self.header = header;
@@ -109,7 +113,7 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
     pub fn load_entry(&mut self) -> Result<Option<Arc<SaveFileEntry>>> {
         loop {
             let mut entry_str = String::new();
-            let count = self.reader.read_line(&mut entry_str)?;
+            let count = self.reader.borrow_mut().deref_mut().read_line(&mut entry_str)?;
 
             if count == 0 {
                 return Ok(None);
@@ -162,19 +166,19 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         Ok(())
     }
 
-    pub fn write_entry(&mut self, result: &SaveFileEntryV1) -> Result<()> {
+    pub fn write_entry(&self, result: &SaveFileEntryV1) -> Result<()> {
         let string = serde_json::to_string(result)?;
-        self.writer.write(string.as_bytes())?;
-        self.writer.write("\n".as_bytes())?;
-        self.writer.flush()?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write(string.as_bytes())?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write("\n".as_bytes())?;
+        self.writer.borrow_mut().deref_mut().flush()?;
         Ok(())
     }
 
-    pub fn write_entry_ref(&mut self, result: &SaveFileEntryV1Ref) -> Result<()> {
+    pub fn write_entry_ref(&self, result: &SaveFileEntryV1Ref) -> Result<()> {
         let string = serde_json::to_string(result)?;
-        self.writer.write(string.as_bytes())?;
-        self.writer.write("\n".as_bytes())?;
-        self.writer.flush()?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write(string.as_bytes())?;
+        *self.written_bytes.borrow_mut() += self.writer.borrow_mut().deref_mut().write("\n".as_bytes())?;
+        self.writer.borrow_mut().deref_mut().flush()?;
         Ok(())
     }
     
@@ -191,5 +195,13 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
     pub fn empty_entry_list(&mut self) {
         self.all_entries.clear();
         self.all_entries.shrink_to_fit();
+    }
+
+    pub fn get_written_bytes(&self) -> usize {
+        *self.written_bytes.borrow()
+    }
+    
+    pub fn flush(&self) -> std::io::Result<()> {
+        self.writer.borrow_mut().deref_mut().flush()
     }
 }
