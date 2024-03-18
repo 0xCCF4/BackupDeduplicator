@@ -37,6 +37,7 @@ pub struct SaveFileEntryV1 {
     pub size: u64,
     pub hash: GeneralHash,
     pub path: FilePath,
+    pub children: Vec<GeneralHash>,
 }
 pub use SaveFileEntryV1 as SaveFileEntry;
 
@@ -47,6 +48,7 @@ pub struct SaveFileEntryV1Ref<'a> {
     pub size: &'a u64,
     pub hash: &'a GeneralHash,
     pub path: &'a FilePath,
+    pub children: Vec<&'a GeneralHash>,
 }
 pub type SaveFileEntryRef<'a> = SaveFileEntryV1Ref<'a>;
 
@@ -111,6 +113,10 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
 
             if count == 0 {
                 return Ok(None);
+            }
+            
+            if count == 1 {
+                continue;
             }
 
             let entry: SaveFileEntry = serde_json::from_str(entry_str.as_str())?;

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use crate::build::worker::{worker_run, WorkerArgument};
-use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryV1Ref, SaveFileEntry, SaveFileEntryType};
+use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryRef, SaveFileEntry};
 use crate::threadpool::ThreadPool;
 
 mod worker;
@@ -23,10 +23,15 @@ pub struct BuildSettings {
 }
 
 #[derive(Debug, Serialize, Clone)]
+struct JobResultContent {
+    already_cached: bool,
+    content: File,
+}
+
+#[derive(Debug, Serialize, Clone)]
 enum JobResult {
-    Final(File),
-    Intermediate(File),
-    Cached(File),
+    Final(JobResultContent),
+    Intermediate(JobResultContent),
 }
 
 impl ResultTrait for JobResult {
@@ -107,31 +112,20 @@ pub fn run(
 
     while let Ok(result) = pool.receive() {
         let finished;
-        let save_cache;
         let result = match result {
             JobResult::Intermediate(inner) => {
                 finished = false;
-                save_cache = true;
                 inner
             },
             JobResult::Final(inner) => {
                 finished = true;
-                save_cache = true;
                 inner
             },
-            JobResult::Cached(inner) => {
-                finished = false;
-                save_cache = false;
-                inner
-            }
         };
         
-        if save_cache {
-            let entry = SaveFileEntryV1Ref::from(&result);
-            match entry.file_type {
-                SaveFileEntryType::Directory => {},
-                _ => { save_file.write_entry_ref(&entry)?; }
-            }
+        if !result.already_cached {
+            let entry = SaveFileEntryRef::from(&result.content);
+            save_file.write_entry_ref(&entry)?;
         }
         
         if finished {
@@ -141,5 +135,3 @@ pub fn run(
     
     return Ok(());
 }
-
-

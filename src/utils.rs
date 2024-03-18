@@ -1,7 +1,6 @@
-use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use anyhow::{Result};
+use anyhow::{anyhow, Result};
 use crate::data::{File, GeneralHash};
 
 pub trait LexicalAbsolute {
@@ -72,10 +71,14 @@ pub fn hash_path(path: &Path, hash: &mut GeneralHash) -> Result<()> {
     Ok(())
 }
 
-pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+pub fn decode_hex(s: &str) -> Result<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return Err(anyhow!("Invalid hex length"));
+    }
     (0..s.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16)
+            .map_err(|e| anyhow!("Failed to parse hex: {}", e)))
         .collect()
 }
 

@@ -5,7 +5,7 @@ use std::sync::mpsc::Sender;
 use std::time::SystemTime;
 use anyhow::anyhow;
 use log::{error, info, trace, warn};
-use crate::build::JobResult;
+use crate::build::{JobResult, JobResultContent};
 use crate::build::worker::directory::worker_run_directory;
 use crate::build::worker::file::worker_run_file;
 use crate::build::worker::other::worker_run_other;
@@ -117,13 +117,10 @@ fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: File
         Some(parent) => {
             parent_job = parent;
             hash = result.get_content_hash().to_owned();
-            worker_publish_result(id, result_publish, match cached {
-                false => JobResult::Intermediate(result),
-                true => JobResult::Cached(result)
-            });
+            worker_publish_result(id, result_publish, JobResult::Intermediate(JobResultContent {already_cached: cached, content: result}));
         },
         None => {
-            worker_publish_result(id, result_publish, JobResult::Final(result));
+            worker_publish_result(id, result_publish, JobResult::Final(JobResultContent {already_cached: cached, content: result}));
             return;
         },
     }

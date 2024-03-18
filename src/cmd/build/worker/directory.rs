@@ -1,17 +1,18 @@
 use std::fs;
+use std::fs::DirEntry;
 use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
 use crate::build::JobResult;
-use crate::build::worker::{worker_create_error, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::data::{DirectoryInformation, File, GeneralHash, Job, JobState};
+use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
+use crate::data::{DirectoryInformation, File, GeneralHash, Job, JobState, SaveFileEntryType};
 use crate::utils;
 
 pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {:?}#{:?}", id, &job.target_path, path);
-    
+
     match job.state {
         JobState::NotProcessed => {
             let read_dir = fs::read_dir(&path);
@@ -23,19 +24,25 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                     return;
                 }
             };
+            let mut read_dir: Vec<DirEntry> = read_dir
+                .filter_map(|entry| {
+                    match entry {
+                        Ok(entry) => {
+                            Some(entry)
+                        },
+                        Err(err) => {
+                            error!("Error while reading directory entry {:?}: {}", path, err);
+                            None
+                        }
+                    }
+                }).collect();
+            read_dir.sort_by_key(|entry| entry.file_name());
 
             let mut children = Vec::new();
 
             for entry in read_dir {
-                match entry {
-                    Ok(entry) => {
-                        let child_path = job.target_path.child_real(entry.file_name());
-                        children.push(child_path);
-                    },
-                    Err(err) => {
-                        error!("Error while reading directory entry {:?}: {}", path, err);
-                    }
-                };
+                let child_path = job.target_path.child_real(entry.file_name());
+                children.push(child_path);
             }
 
             job.state = JobState::Analyzed;
@@ -63,18 +70,49 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
             let mut hash = GeneralHash::from_type(arg.hash_type);
             let mut children = Vec::new();
 
+            let mut cached_entry = None;
             let mut error;
             match job.finished_children.lock() {
                 Ok(mut finished) => {
+                    finished.sort_by(|a, b| a.get_content_hash().partial_cmp(b.get_content_hash()).expect("Two hashes must compare to each other"));
+
                     error = false;
-                    match utils::hash_directory(finished.iter(), &mut hash) {
-                        Ok(_) => {},
-                        Err(err) => {
-                            error = true;
-                            error!("Error while hashing directory {:?}: {}", path, err);
+                    
+                    // query cache
+                    match worker_fetch_savedata(arg, &job.target_path) {
+                        Some(found) => {
+                            if found.file_type == SaveFileEntryType::Directory && found.modified == modified && found.size == finished.len() as u64 {
+                                if found.children.len() == finished.len() && found.children.iter().zip(finished.iter().map(|e| e.get_content_hash())).all(|(a, b)| a == b) {
+                                    trace!("Directory {:?} is already in save file", path);
+
+                                    let mut children = Vec::new();
+                                    children.append(finished.deref_mut());
+
+                                    let file = File::Directory(DirectoryInformation {
+                                        path: job.target_path.clone(),
+                                        modified,
+                                        content_hash: found.hash.clone(),
+                                        number_of_children: children.len() as u64,
+                                        children,
+                                    });
+
+                                    cached_entry = Some(file);
+                                }
+                            }
                         }
+                        None => {}
                     }
-                    children.append(finished.deref_mut());
+
+                    if cached_entry.is_none() {
+                        match utils::hash_directory(finished.iter(), &mut hash) {
+                            Ok(_) => {},
+                            Err(err) => {
+                                error = true;
+                                error!("Error while hashing directory {:?}: {}", path, err);
+                            }
+                        }
+                        children.append(finished.deref_mut());
+                    }
                 }
                 Err(err) => {
                     error!("[{}] failed to lock finished children: {}", id, err);
@@ -83,6 +121,11 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
             }
             if error {
                 worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
+                return;
+            }
+
+            if let Some(file) = cached_entry {
+                worker_publish_result_or_trigger_parent(id, true, file, job, result_publish, job_publish, arg);
                 return;
             }
 

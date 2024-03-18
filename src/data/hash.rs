@@ -56,7 +56,7 @@ impl fmt::Display for GeneralHashType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd)]
 pub enum GeneralHash {
     SHA512([u8; 64]),
     SHA256([u8; 32]),
@@ -98,7 +98,7 @@ impl Serialize for GeneralHash {
                 hex.push_str(&format!("{:02x}", byte));
             },
             GeneralHash::NULL => {
-                hex.push_str("0");
+                hex.push_str("00");
             }
         }
 
