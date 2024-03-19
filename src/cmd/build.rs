@@ -75,7 +75,7 @@ pub fn run(
         }
     }
     
-    match save_file.load_all_entries() {
+    match save_file.load_all_entries_no_filter() {
         Ok(_) => {},
         Err(err) => {
             return Err(anyhow!("Failed to load entries from result file: {}. Delete the output file or provide the --override flag to override", err));

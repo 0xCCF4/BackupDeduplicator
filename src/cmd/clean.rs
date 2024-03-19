@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use anyhow::{anyhow, Result};
-use log::{info, trace};
+use log::{info, trace, warn};
 use crate::data::SaveFile;
 
 pub struct CleanSettings {
@@ -41,17 +41,18 @@ pub fn run(
     let mut save_file = SaveFile::new(&mut output_buf_writer, &mut input_buf_reader, false, true, true);
     save_file.load_header()?;
 
-    // STEP 1 remove duplicates
-
-    save_file.load_all_entries()?;
-
-    // STEP 2 remove deleted files
-
-    // todo
-
-    // STEP 3 remove files not in root
-
-    // todo
+    // remove duplicates, remove deleted files
+    save_file.load_all_entries(|entry| {
+        match entry.path.resolve_file() {
+            Ok(path) => path.exists(),
+            Err(err) => {
+                warn!("File {:?} resolving failed: {}", entry.path, err);
+                true
+            }
+        }
+    })?;
+    
+    // todo filter files deleted from inside archives
 
     // save results
 

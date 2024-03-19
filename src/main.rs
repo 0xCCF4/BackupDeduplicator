@@ -72,6 +72,9 @@ enum Command {
         /// The directory to clean
         #[arg(short, long, default_value = "hash_tree.bdd")]
         output: String,
+        /// Working directory, if set, the tool will use the current working directory as the base for relative paths.
+        #[arg(short, long)]
+        working_directory: Option<String>,
         /// Overwrite the output file
         #[arg(long="overwrite", default_value = "false")]
         overwrite: bool,
@@ -299,6 +302,7 @@ fn main() {
             output,
             overwrite,
             root,
+            working_directory,
         } => {
             let input = std::path::Path::new(&input);
             let output = std::path::Path::new(&output);
@@ -317,7 +321,34 @@ fn main() {
                     std::process::exit(exitcode::CONFIG);
                 }
             };
-            
+
+            // Change working directory
+            trace!("Changing working directory");
+
+            let working_directory = working_directory.map(|wd| std::path::PathBuf::from(wd));
+
+            let working_directory = working_directory.map(|wd| match wd.canonicalize() {
+                Ok(wd) => wd,
+                Err(e) => {
+                    eprintln!("IO error, could not resolve working directory: {:?}", e);
+                    std::process::exit(exitcode::CONFIG);
+                }
+            });
+
+            if let Some(working_directory) = working_directory {
+                env::set_current_dir(&working_directory).unwrap_or_else(|_| {
+                    eprintln!("IO error, could not change working directory: {}", working_directory.display());
+                    std::process::exit(exitcode::CONFIG);
+                });
+            }
+            let working_directory = std::env::current_dir().unwrap_or_else(|_| {
+                eprintln!("IO error, could not resolve working directory");
+                std::process::exit(exitcode::CONFIG);
+            }).canonicalize().unwrap_or_else(|_| {
+                eprintln!("IO error, could not resolve working directory");
+                std::process::exit(exitcode::CONFIG);
+            });
+
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
                 std::process::exit(exitcode::CONFIG);

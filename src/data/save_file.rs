@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use anyhow::Result;
-use log::warn;
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::data::{FilePath, GeneralHash, GeneralHashType};
@@ -110,7 +110,11 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         Ok(())
     }
     
-    pub fn load_entry(&mut self) -> Result<Option<Arc<SaveFileEntry>>> {
+    pub fn load_entry_no_filter(&mut self) -> Result<Option<Arc<SaveFileEntry>>> {
+        self.load_entry(|_| true)
+    }
+    
+    pub fn load_entry<F: Fn(&SaveFileEntry) -> bool>(&mut self, filter: F) -> Result<Option<Arc<SaveFileEntry>>> {
         loop {
             let mut entry_str = String::new();
             let count = self.reader.borrow_mut().deref_mut().read_line(&mut entry_str)?;
@@ -125,23 +129,24 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
 
             let entry: SaveFileEntry = serde_json::from_str(entry_str.as_str())?;
 
-            let hash = entry.hash.clone();
-
-            if hash.hash_type() != self.header.hash_type && !(entry.file_type == SaveFileEntryType::Other && entry.hash.hash_type() == GeneralHashType::NULL) {
+            if entry.hash.hash_type() != self.header.hash_type && !(entry.file_type == SaveFileEntryType::Other && entry.hash.hash_type() == GeneralHashType::NULL) {
                 warn!("Hash type mismatch ignoring entry: {:?}", entry.path);
                 continue;
             }
-
-            let path = entry.path.clone();
+            
+            if !filter(&entry) {
+                trace!("Entry filtered: {:?}", entry.path);
+                continue;
+            }
 
             let shared_entry = Arc::new(entry);
 
             if self.enable_file_by_hash {
-                self.file_by_hash.entry(hash).or_insert_with(Vec::new).push(Arc::clone(&shared_entry));
+                self.file_by_hash.entry(shared_entry.hash.clone()).or_insert_with(Vec::new).push(Arc::clone(&shared_entry));
             }
 
             if self.enable_file_by_path {
-                match self.file_by_path.insert(path, Arc::clone(&shared_entry)) {
+                match self.file_by_path.insert(shared_entry.path.clone(), Arc::clone(&shared_entry)) {
                     None => {}
                     Some(old) => {
                         warn!("Duplicate entry for path: {:?}", &old.path);
@@ -160,10 +165,14 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         }
     }
     
-    pub fn load_all_entries(&mut self) -> Result<()> {
-        while let Some(_) = self.load_entry()? {}
+    pub fn load_all_entries<F: Fn(&SaveFileEntry) -> bool>(&mut self, filter: F) -> Result<()> {
+        while let Some(_) = self.load_entry(&filter)? {}
         
         Ok(())
+    }
+    
+    pub fn load_all_entries_no_filter(&mut self) -> Result<()> {
+        self.load_all_entries(|_| true)
     }
 
     pub fn write_entry(&self, result: &SaveFileEntryV1) -> Result<()> {
