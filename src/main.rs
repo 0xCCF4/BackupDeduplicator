@@ -81,7 +81,10 @@ enum Command {
         /// Root directory, if set remove all files that are not subfiles of this directory
         #[arg(long)]
         root: Option<String>,
-    }
+        /// Follow symlinks, if set, the tool will not follow symlinks
+        #[arg(long)]
+        follow_symlinks: bool,
+    },
     /*
     /// Update a hash-tree with the given directory
     /// This command will update by checking if the file sizes or modification times have changed.
@@ -278,7 +281,8 @@ fn main() {
                         match clean::run(CleanSettings {
                             input: output.clone(),
                             output: output,
-                            root: None
+                            root: None,
+                            follow_symlinks
                         }) {
                             Ok(_) => {
                                 info!("Clean command completed successfully");
@@ -303,6 +307,7 @@ fn main() {
             overwrite,
             root,
             working_directory,
+            follow_symlinks
         } => {
             let input = std::path::Path::new(&input);
             let output = std::path::Path::new(&output);
@@ -362,7 +367,8 @@ fn main() {
             match backup_deduplicator::clean::run(CleanSettings {
                 input,
                 output,
-                root
+                root,
+                follow_symlinks
             }) {
                 Ok(_) => {
                     info!("Clean command completed successfully");

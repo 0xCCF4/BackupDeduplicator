@@ -2,12 +2,13 @@ use std::fs;
 use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
-use crate::data::SaveFile;
+use crate::data::{SaveFile, SaveFileEntryType};
 
 pub struct CleanSettings {
     pub input: PathBuf,
     pub output: PathBuf,
     pub root: Option<String>,
+    pub follow_symlinks: bool,
 }
 
 pub fn run(
@@ -44,7 +45,37 @@ pub fn run(
     // remove duplicates, remove deleted files
     save_file.load_all_entries(|entry| {
         match entry.path.resolve_file() {
-            Ok(path) => path.exists(),
+            Ok(path) => {
+                if !path.exists() {
+                    return false;
+                }
+                
+                let metadata = match clean_settings.follow_symlinks { 
+                    true => fs::metadata(path),
+                    false => fs::symlink_metadata(path)
+                };
+                let metadata = match metadata {
+                    Ok(data) => Some(data),
+                    Err(err) => {
+                        warn!("Unable to read metadata of {:?}: {}", entry.path, err);
+                        None
+                    }
+                };
+                
+                if let Some(metadata) = metadata {
+                    return if metadata.is_symlink() {
+                        entry.file_type == SaveFileEntryType::Symlink
+                    } else if metadata.is_dir() {
+                        entry.file_type == SaveFileEntryType::Directory
+                    } else if metadata.is_file() {
+                        entry.file_type == SaveFileEntryType::File
+                    } else {
+                        entry.file_type == SaveFileEntryType::Other
+                    }
+                }
+                
+                true
+            },
             Err(err) => {
                 warn!("File {:?} resolving failed: {}", entry.path, err);
                 true
