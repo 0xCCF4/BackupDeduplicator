@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::fmt::Formatter;
 use std::path::PathBuf;
 use anyhow::{Result};
 use serde::{Deserialize, Serialize};
@@ -97,3 +98,22 @@ impl PartialEq for FilePath {
 }
 
 impl Eq for FilePath {}
+
+impl std::fmt::Display for FilePath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut result = String::new();
+        
+        let mut first = true; 
+        for component in &self.path {
+            if first {
+                first = false;
+            } else {
+                result.push_str("| ");
+            }
+            
+            result.push_str(component.path.to_str().unwrap_or_else(|| "<invalid path>"));
+        }
+        
+        write!(f, "{}", result)
+    }
+}

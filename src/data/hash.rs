@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::Display;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::de::Error;
@@ -66,8 +67,8 @@ pub enum GeneralHash {
     NULL,
 }
 
-impl Serialize for GeneralHash {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+impl Display for GeneralHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let capacity = match self {
             GeneralHash::SHA512(_) => 128,
             GeneralHash::SHA256(_) => 64,
@@ -77,8 +78,8 @@ impl Serialize for GeneralHash {
             GeneralHash::NULL => 0,
         };
 
-        let mut hex = String::with_capacity(capacity+1+6);
-        
+        let mut hex = String::with_capacity(capacity + 1 + 6);
+
         hex.push_str((self.hash_type().to_string() + ":").as_str());
 
         match self {
@@ -102,7 +103,13 @@ impl Serialize for GeneralHash {
             }
         }
 
-        serializer.serialize_str(&hex)
+        write!(f, "{}", hex)
+    }
+}
+
+impl Serialize for GeneralHash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        serializer.serialize_str(self.to_string().as_str())
     }
 }
 

@@ -6,7 +6,7 @@ use crate::build::worker::{worker_fetch_savedata, worker_publish_result_or_trigg
 use crate::data::{File, Job, OtherInformation, SaveFileEntryType};
 
 pub fn worker_run_other(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
-    trace!("[{}] analyzing other {:?}#{:?}", id, &job.target_path, path);
+    trace!("[{}] analyzing other {} > {:?}", id, &job.target_path, path);
 
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {

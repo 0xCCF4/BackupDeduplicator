@@ -109,7 +109,7 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         
         Ok(())
     }
-    
+
     pub fn load_entry_no_filter(&mut self) -> Result<Option<Arc<SaveFileEntry>>> {
         self.load_entry(|_| true)
     }
@@ -170,7 +170,7 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
         
         Ok(())
     }
-    
+
     pub fn load_all_entries_no_filter(&mut self) -> Result<()> {
         self.load_all_entries(|_| true)
     }

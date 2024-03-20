@@ -3,10 +3,10 @@ use std::str::FromStr;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, LevelFilter, trace};
 use backup_deduplicator::build::BuildSettings;
-use backup_deduplicator::clean;
+use backup_deduplicator::{analyze, clean, main};
+use backup_deduplicator::analyze::AnalysisSettings;
 use backup_deduplicator::clean::CleanSettings;
 use backup_deduplicator::data::GeneralHashType;
-use backup_deduplicator::utils::LexicalAbsolute;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -85,6 +85,18 @@ enum Command {
         #[arg(long)]
         follow_symlinks: bool,
     },
+    /// Find duplicates and output them as analysis result
+    Analyze {
+        /// The hash tree file to analyze
+        #[arg(short, long, default_value = "hash_tree.bdd")]
+        input: String,
+        /// Output file for the analysis result
+        #[arg(short, long, default_value = "analysis.json")]
+        output: String,
+        /// Overwrite the output file
+        #[arg(long="overwrite", default_value = "false")]
+        overwrite: bool,
+    },
     /*
     /// Update a hash-tree with the given directory
     /// This command will update by checking if the file sizes or modification times have changed.
@@ -102,15 +114,7 @@ enum Command {
         #[arg(long)]
         working_directory: Option<String>,
     },
-    /// Find duplicates and output them as analysis result
-    Analyze {
-        /// The hash tree file to analyze
-        #[arg(short, long, default_value = "hash_tree.bdd")]
-        input: String,
-        /// Output file for the analysis result
-        #[arg(short, long, default_value = "analysis.json")]
-        output: String,
-    },
+    
     */
 }
 
@@ -172,50 +176,14 @@ fn main() {
 
             // Convert to paths and check if they exist
 
-            let directory = std::path::Path::new(&directory);
-            let output = std::path::Path::new(&output);
-            let working_directory = working_directory.map(|wd| std::path::PathBuf::from(wd));
+            let directory = main::utils::parse_path(directory.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+            let working_directory = working_directory.map(|w| main::utils::parse_path(w.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting));
 
             if !directory.exists() {
                 eprintln!("Target directory does not exist: {}", directory.display());
                 std::process::exit(exitcode::CONFIG);
             }
-
-            // Convert to absolute paths
-
-            trace!("Resolving paths");
-            trace!("Canonicalization of directory: {:?}", directory);
-
-            let directory = match directory.canonicalize() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve target directory: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            };
-
-            trace!("Canonicalization of output: {:?}", output);
-
-            let output = match output.to_path_buf().to_lexical_absolute() {
-                Ok(out) => out,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve output file: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            };
-
-            trace!("Canonicalization of working directory: {:?}", working_directory);
-
-            let working_directory = working_directory.map(|wd| match wd.canonicalize() {
-                Ok(wd) => wd,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve working directory: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            });
-
-            trace!("Resolved paths");
-            trace!("Checking if output directory exists");
 
             match output.parent().map(|p| p.exists()) {
                 Some(false) => {
@@ -233,19 +201,7 @@ fn main() {
             // Change working directory
             trace!("Changing working directory");
 
-            if let Some(working_directory) = working_directory {
-                env::set_current_dir(&working_directory).unwrap_or_else(|_| {
-                    eprintln!("IO error, could not change working directory: {}", working_directory.display());
-                    std::process::exit(exitcode::CONFIG);
-                });
-            }
-            let working_directory = std::env::current_dir().unwrap_or_else(|_| {
-                eprintln!("IO error, could not resolve working directory");
-                std::process::exit(exitcode::CONFIG);
-            }).canonicalize().unwrap_or_else(|_| {
-                eprintln!("IO error, could not resolve working directory");
-                std::process::exit(exitcode::CONFIG);
-            });
+            let working_directory = main::utils::change_working_directory(working_directory);
 
             // Convert paths to relative path to working directory
 
@@ -309,50 +265,13 @@ fn main() {
             working_directory,
             follow_symlinks
         } => {
-            let input = std::path::Path::new(&input);
-            let output = std::path::Path::new(&output);
-            
-            let input = match input.to_path_buf().to_lexical_absolute() {
-                Ok(out) => out,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve output file: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            };
-            let output = match output.to_path_buf().to_lexical_absolute() {
-                Ok(out) => out,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve output file: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            };
+            let input = main::utils::parse_path(input.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
 
             // Change working directory
             trace!("Changing working directory");
 
-            let working_directory = working_directory.map(|wd| std::path::PathBuf::from(wd));
-
-            let working_directory = working_directory.map(|wd| match wd.canonicalize() {
-                Ok(wd) => wd,
-                Err(e) => {
-                    eprintln!("IO error, could not resolve working directory: {:?}", e);
-                    std::process::exit(exitcode::CONFIG);
-                }
-            });
-
-            if let Some(working_directory) = working_directory {
-                env::set_current_dir(&working_directory).unwrap_or_else(|_| {
-                    eprintln!("IO error, could not change working directory: {}", working_directory.display());
-                    std::process::exit(exitcode::CONFIG);
-                });
-            }
-            let working_directory = std::env::current_dir().unwrap_or_else(|_| {
-                eprintln!("IO error, could not resolve working directory");
-                std::process::exit(exitcode::CONFIG);
-            }).canonicalize().unwrap_or_else(|_| {
-                eprintln!("IO error, could not resolve working directory");
-                std::process::exit(exitcode::CONFIG);
-            });
+            main::utils::change_working_directory(working_directory.map(|w| main::utils::parse_path(w.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting)));
 
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
@@ -364,7 +283,7 @@ fn main() {
                 std::process::exit(exitcode::CONFIG);
             }
             
-            match backup_deduplicator::clean::run(CleanSettings {
+            match clean::run(CleanSettings {
                 input,
                 output,
                 root,
@@ -379,6 +298,39 @@ fn main() {
                     std::process::exit(exitcode::SOFTWARE);
                 }
             }
-        }
+        },
+        Command::Analyze {
+            input,
+            output,
+            overwrite
+        } => {
+            let input = main::utils::parse_path(input.as_str(), main::utils::ParsePathKind::AbsoluteExisting);
+            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+
+            if !input.exists() {
+                eprintln!("Input file does not exist: {:?}", input);
+                std::process::exit(exitcode::CONFIG);
+            }
+            
+            if output.exists() && !overwrite {
+                eprintln!("Output file already exists: {:?}. Set --override to override its content", output);
+                std::process::exit(exitcode::CONFIG);
+            }
+
+            match analyze::run(AnalysisSettings {
+                input,
+                output,
+                threads: args.threads,
+            }) {
+                Ok(_) => {
+                    info!("Analyze command completed successfully");
+                    std::process::exit(exitcode::OK);
+                }
+                Err(e) => {
+                    eprintln!("Error: {:?}", e);
+                    std::process::exit(exitcode::SOFTWARE);
+                }
+            }
+        },
     }
 }

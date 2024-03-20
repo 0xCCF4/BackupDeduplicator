@@ -5,6 +5,7 @@ pub mod utils;
 mod cmd {
     pub mod build;
     pub mod clean;
+    pub mod analyze;
 }
 pub use cmd::*;
 
@@ -20,10 +21,12 @@ pub mod data {
     mod hash;
     pub use hash::*;
     
-    mod save_file;
-    pub use save_file::*;
+    mod hashtree_save_file;
+    pub use hashtree_save_file::*;
 }
 
-mod analysis;
+pub mod main {
+    pub mod utils;
+}
 
 pub mod threadpool;

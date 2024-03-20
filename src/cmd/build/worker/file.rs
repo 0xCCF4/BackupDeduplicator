@@ -8,7 +8,7 @@ use crate::data::{GeneralHash, Job, GeneralHashType, File, FileInformation, Save
 use crate::utils;
 
 pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
-    trace!("[{}] analyzing file {:?}#{:?}", id, &job.target_path, path);
+    trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
 
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {
