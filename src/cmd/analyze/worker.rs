@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
-use crate::data::{File, FilePath, JobTrait, ResultTrait, SaveFileEntry, SaveFileEntryType};
+use log::error;
+use crate::data::{FilePath, JobTrait, ResultTrait, SaveFileEntry, SaveFileEntryType};
 use super::analysis::{DirectoryInformation, AnalysisFile, FileInformation, OtherInformation, SymlinkInformation};
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl JobTrait for AnalysisJob {
 
 #[derive(Debug)]
 pub struct AnalysisResult {
-    file: Arc<Mutex<File>>,
+    
 }
 
 impl ResultTrait for AnalysisResult {
@@ -56,82 +56,163 @@ impl ResultTrait for AnalysisResult {
 
 
 
-fn parent_file(file: &MarkedIntermediaryFile) -> Option<&MarkedIntermediaryFile> {
-    None
+fn parent_file<'a, 'b>(file: &'b MarkedIntermediaryFile, arg: &'a WorkerArgument) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
+    match file.saved_file_entry.path.parent() {
+        None => None,
+        Some(parent_path) => {
+            let cache = arg.file_by_path.get(&parent_path).map(|file| &file.file);
+            match cache {
+                None => {
+                    None
+                },
+                Some(cache) => {
+                    Some((cache, parent_path))
+                }
+            }
+        }
+    }
 }
 
-fn recursive_process_file(path: &FilePath, arg: &mut WorkerArgument) {
-    /*
-    let mut marked_file = arg.file_by_path.get(path);
+fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
+    let marked_file = arg.file_by_path.get(path);
     
-    while let Some(file) = marked_file {
+    let mut attach_parent = None;
+    
+    if let Some(file) = marked_file {
         let result = match file.saved_file_entry.file_type {
             SaveFileEntryType::File => {
                 AnalysisFile::File(FileInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
+                    parent: Mutex::new(None),
                 })
             },
             SaveFileEntryType::Symlink => {
                 AnalysisFile::Symlink(SymlinkInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
+                    parent: Mutex::new(None),
                 })
             },
             SaveFileEntryType::Other => {
                 AnalysisFile::Other(OtherInformation {
                     path: file.saved_file_entry.path.clone(),
+                    parent: Mutex::new(None),
                 })
             },
             SaveFileEntryType::Directory => {
                 AnalysisFile::Directory(DirectoryInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
-                    children: vec![],
+                    children: Mutex::new(Vec::new()),
+                    parent: Mutex::new(None),
                 })
             }
         };
         let result = Arc::new(result);
-        
+
         match file.file.lock() {
             Ok(mut guard) => {
                 if guard.deref().is_none() {
-                    *guard = Some(result);
+                    *guard = Some(Arc::clone(&result));
                 } else {
-                    break;
+                    return; // is already some
                 }
             },
             Err(err) => {
                 panic!("Failed to lock file: {}", err);
             }
         }
-        
-        let parent = parent_file(file);
-        
-        if let Some(parent) = parent {
-            match parent.file.lock() {
-                Ok(mut guard) => {
-                    if let Some(parent) = guard.deref() {
-                        match parent {
-                            File::Directory(parent) => {
-                                parent.children.push()
+
+        if let Some((parent, parent_path)) = parent_file(file, arg) {
+            attach_parent = Some((result, parent, parent_path));
+        }
+    }
+    
+    if let Some((result, parent, parent_path)) = attach_parent {
+        match add_to_parent_as_child(parent, &result) {
+            AddToParentResult::Ok => { return; },
+            AddToParentResult::ParentDoesNotExist => {
+                // parent does not exist
+                // create it
+                recursive_process_file(&parent_path, arg);
+                // try to read to parent again
+                match add_to_parent_as_child(parent, &result) {
+                    AddToParentResult::Ok => { return; },
+                    AddToParentResult::ParentDoesNotExist => {
+                        error!("Parent still does not exist");
+                        return;
+                    },
+                    AddToParentResult::Error => {
+                        return;
+                    }
+                }
+            },
+            AddToParentResult::Error => {
+                return;
+            }
+        }
+    }
+}
+
+enum AddToParentResult {
+    Ok,
+    ParentDoesNotExist,
+    Error,
+}
+
+fn add_to_parent_as_child(parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child: &Arc<AnalysisFile>) -> AddToParentResult {
+    match parent.lock() {
+        Ok(guard) => {
+            // exclusive access to parent file
+            match guard.deref() {
+                Some(parent) => {
+                    // parent already present
+                    
+                    match child.parent().lock() {
+                        Ok(mut guard) => {
+                            // set parent
+                            *guard = Some(Arc::downgrade(parent));
+                        },
+                        Err(err) => {
+                            error!("Failed to lock parent: {}", err);
+                            return AddToParentResult::Error;
+                        }
+                    }
+                    
+                    match parent.deref() {
+                        AnalysisFile::Directory(dir) => {
+                            match dir.children.lock() {
+                                Ok(mut guard) => {
+                                    // add as child
+                                    guard.push(Arc::clone(child));
+                                    AddToParentResult::Ok
+                                },
+                                Err(err) => {
+                                    error!("Failed to lock children: {}", err);
+                                    AddToParentResult::Error
+                                }
                             }
+                        },
+                        _ => {
+                            error!("Parent is not a directory");
+                            AddToParentResult::Error
                         }
                     }
                 },
-                Err(err) => {
-                    panic!("Failed to lock file: {}", err);
+                None => {
+                    // parent not yet present
+                    AddToParentResult::ParentDoesNotExist
                 }
             }
+        },
+        Err(err) => {
+            error!("Failed to lock file: {}", err);
+            AddToParentResult::Error
         }
-        
-        marked_file = parent;
     }
-    */
-    
-    todo!("Implement recursive_process_file");
 }
 
-pub fn worker_run(id: usize, job: AnalysisJob, result_publish: &Sender<AnalysisResult>, job_publish: &Sender<AnalysisJob>, arg: &mut WorkerArgument) {
-    todo!("Implement worker_run")
+pub fn worker_run(_id: usize, job: AnalysisJob, _result_publish: &Sender<AnalysisResult>, _job_publish: &Sender<AnalysisJob>, arg: &mut WorkerArgument) {
+    recursive_process_file(&job.file.path, arg);
 }

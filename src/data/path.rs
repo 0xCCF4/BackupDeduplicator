@@ -89,6 +89,40 @@ impl FilePath {
         
         return result;
     }
+    
+    pub fn parent(&self) -> Option<FilePath> {
+        let last = self.path.last();
+        
+        match last { 
+            None => None,
+            Some(last) => {
+                let parent = last.path.parent();
+                
+                match parent {
+                    Some(parent) => {
+                        let mut result = FilePath {
+                            path: self.path.clone()
+                        };
+                        let last = result.path.last_mut().unwrap();
+                        last.path = parent.to_path_buf();
+                        
+                        Some(result)
+                    },
+                    None => {
+                        if self.path.len() == 1 {
+                            None
+                        } else {
+                            let mut result = FilePath {
+                                path: self.path.clone()
+                            };
+                            result.path.pop();
+                            Some(result)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl PartialEq for FilePath {

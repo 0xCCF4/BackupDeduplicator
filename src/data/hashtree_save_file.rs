@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use anyhow::Result;
-use log::{trace, warn};
+use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::data::{FilePath, GeneralHash, GeneralHashType};
@@ -23,7 +23,7 @@ pub struct SaveFileHeaders {
     pub creation_date: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 pub enum SaveFileEntryTypeV1 {
     File,
     Directory,
@@ -149,7 +149,9 @@ impl<'a, W: Write, R: BufRead> SaveFile<'a, W, R> {
                 match self.file_by_path.insert(shared_entry.path.clone(), Arc::clone(&shared_entry)) {
                     None => {}
                     Some(old) => {
-                        warn!("Duplicate entry for path: {:?}", &old.path);
+                        // this happens if analysis was canceled and continued
+                        // and an already analysed file changed
+                        info!("Duplicate entry for path: {:?}", &old.path);
                         if self.enable_all_entry_list {
                             self.all_entries.retain(|x| x != &old);
                         }

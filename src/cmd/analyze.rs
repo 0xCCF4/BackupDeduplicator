@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Result};
-use log::{info, trace};
+use log::{error, info, trace};
+use crate::analyze::analysis::{AnalysisFile, ResultEntryRef};
 use crate::analyze::worker::{AnalysisJob, AnalysisResult, MarkedIntermediaryFile, WorkerArgument};
-use crate::data::{Job, SaveFile, SaveFileEntry};
+use crate::data::{GeneralHash, SaveFile, SaveFileEntry, SaveFileEntryType};
 use crate::threadpool::ThreadPool;
 
 pub struct AnalysisSettings {
@@ -87,10 +89,8 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 
     let pool: ThreadPool<AnalysisJob, AnalysisResult> = ThreadPool::new(args, crate::cmd::analyze::worker::worker_run);
     
-    for entry in file_by_hash.values() {
-        for entry in entry.iter() {
-            pool.publish(AnalysisJob::new(Arc::clone(entry)));
-        }
+    for entry in &all_files {
+        pool.publish(AnalysisJob::new(Arc::clone(entry)));
     }
     
     loop {
@@ -104,7 +104,127 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         }
     }
 
+    drop(pool);
+    
+    let mut duplicated_bytes: u64 = 0;
+
+    for entry in &all_files {
+        trace!("File: {}", entry.path);
+        let file = file_by_path.get(&entry.path).unwrap();
+        let file = file.file.lock().unwrap();
+        if let Some(file) = file.deref() {
+            let parent = file.parent().lock().unwrap();
+            match parent.deref() {
+                Some(parent) => {
+                    // check if parent is also conflicting
+
+                    let parent = parent.upgrade().unwrap();
+                    let parent_hash;
+                    match parent.deref() {
+                        AnalysisFile::File(info) => {
+                            parent_hash = Some(&info.content_hash);
+                        },
+                        AnalysisFile::Directory(info) => {
+                            parent_hash = Some(&info.content_hash);
+                        },
+                        AnalysisFile::Symlink(info) => {
+                            parent_hash = Some(&info.content_hash);
+                        },
+                        AnalysisFile::Other(_) => {
+                            parent_hash = None;
+                        },
+                    }
+
+                    let parent_conflicting;
+
+                    match parent_hash {
+                        None => {parent_conflicting = false;}
+                        Some(parent_hash) => {
+                            parent_conflicting = match file_by_hash.get(parent_hash) {
+                                Some(entries) => {
+                                    entries.len() >= 2
+                                },
+                                None => {
+                                    false
+                                }
+                            }
+                        }
+                    }
+
+                    if !parent_conflicting {
+                        duplicated_bytes += write_result_entry(file, &file_by_hash, &mut output_buf_writer);
+                    }
+                }
+                None => {
+                    duplicated_bytes += write_result_entry(file, &file_by_hash, &mut output_buf_writer);
+                }
+            }
+        } else {
+            error!("File not analyzed yet: {:?}", entry.path);
+        }
+    }
+
+    output_buf_writer.flush().expect("Unable to flush file");
+    
+    print!("There are {} GB of duplicated files", duplicated_bytes / 1024 / 1024 / 1024);
+
     Ok(())
+}
+
+#[derive(Debug, PartialEq, Hash, Eq)]
+struct SetKey<'a> {
+    size: u64,
+    ftype: &'a SaveFileEntryType,
+}
+fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, Vec<Arc<SaveFileEntry>>>, output_buf_writer: &mut std::io::BufWriter<&fs::File>) -> u64 {
+    let hash = match file {
+        AnalysisFile::File(info) => &info.content_hash,
+        AnalysisFile::Directory(info) => &info.content_hash,
+        AnalysisFile::Symlink(info) => &info.content_hash,
+        AnalysisFile::Other(_) => {
+            return 0;
+        }
+    };
+    
+    let mut sets: HashMap<SetKey, Vec<&SaveFileEntry>> = HashMap::new();
+
+    for file in file_by_hash.get(hash).unwrap() {
+        sets.entry(SetKey {
+            size: file.size,
+            ftype: &file.file_type
+        }).or_insert(Vec::new()).push(file);
+    }
+    
+    let mut result_size: u64 = 0;
+    
+    for set in &sets {
+        if set.1.len() <= 1 {
+            continue;
+        }
+        
+        if &set.1[0].path != file.path() {
+            // no duplicates
+            continue;
+        }
+        
+        let mut conflicting = Vec::with_capacity(set.1.len());
+        for file in set.1 {
+            conflicting.push(&file.path);
+        }
+        
+        let result = ResultEntryRef {
+            ftype: &set.0.ftype,
+            size: set.0.size,
+            hash,
+            conflicting,
+        };
+        output_buf_writer.write(serde_json::to_string(&result).unwrap().as_bytes()).expect("Unable to write to file");
+        output_buf_writer.write('\n'.to_string().as_bytes()).expect("Unable to write to file");
+
+        result_size += result.size * (result.conflicting.len() as u64 - 1);
+    }
+    
+    return result_size;
 }
 
 mod worker;
