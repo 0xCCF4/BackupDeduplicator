@@ -14,14 +14,13 @@ jobs:
             archive: zip
           - target: x86_64-unknown-linux-musl
             archive: tar.gz
-          - target: x86_64-apple-darwin
-            archive: zip
 
     steps:
       - uses: actions/checkout@master
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8.0
         with:
           toolchain: "stable"
+          target: ${{ matrix.target }}
 
       - name: Build
         run: cargo build --verbose

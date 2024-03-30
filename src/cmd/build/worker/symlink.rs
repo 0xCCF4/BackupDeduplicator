@@ -6,7 +6,6 @@ use log::{error, trace};
 use crate::build::JobResult;
 use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::data::{GeneralHash, Job};
-use crate::utils;
 
 pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing symlink {} > {:?}", id, &job.target_path, path);
@@ -49,7 +48,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
 
     let mut hash = GeneralHash::from_type(arg.hash_type);
 
-    match utils::hash_path(&target_link, &mut hash) {
+    match hash.hash_path(&target_link) {
         Ok(_) => {},
         Err(err) => {
             error!("Error while hashing symlink target {:?}: {}", target_link, err);

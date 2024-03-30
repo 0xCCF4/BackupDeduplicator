@@ -5,7 +5,6 @@ use log::{error, trace};
 use crate::build::JobResult;
 use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::data::{GeneralHash, Job, GeneralHashType, File, FileInformation, SaveFileEntryType};
-use crate::utils;
 
 pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
@@ -36,7 +35,7 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
                 // dont hash file
                 content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
             } else {
-                match utils::hash_file(&mut reader, &mut hash) {
+                match hash.hash_file(&mut reader) {
                     Ok(size) => {
                         content_size = size;
                     }

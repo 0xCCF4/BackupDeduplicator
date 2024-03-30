@@ -8,7 +8,6 @@ use log::{error, trace};
 use crate::build::JobResult;
 use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::data::{DirectoryInformation, File, GeneralHash, Job, JobState, SaveFileEntryType};
-use crate::utils;
 
 pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {} > {:?}", id, &job.target_path, path);
@@ -104,7 +103,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                     }
 
                     if cached_entry.is_none() {
-                        match utils::hash_directory(finished.iter(), &mut hash) {
+                        match hash.hash_directory(finished.iter()) {
                             Ok(_) => {},
                             Err(err) => {
                                 error = true;

@@ -53,7 +53,12 @@ The tool is a command line tool. There are two stages: `build` and `analyze`.
 ### Build
 Exemplary usage to build a hash tree of a directory:
 ```bash
-backup-deduplicator --threads 16 build -w /parent -o /parent/hash.bdd /parent/target
+backup-deduplicator
+  --threads 16
+  build
+  --working-directory /parent
+  --output /parent/hash.bdd
+  /parent/target
 ```
 This will build a hash tree of the directory `/path/to/parent/target` and save it to
 `hash.bdd` in the parent directory. The tool will use 16 threads to split the hash
@@ -62,7 +67,10 @@ calculation work.
 ### Analyze
 Exemplary usage to analyze a hash tree:
 ```bash
-backup-deduplicator analyze -o /parent/analysis.bdd /parent/hash.bdd
+backup-deduplicator
+  analyze
+  --output /parent/analysis.bdd
+  /parent/hash.bdd
 ```
 This will analyze the hash tree in `hash.bdd` and save the analysis result to `analysis.bdd`.
 The analysis file will then contain a list of JSON objects (one per line),
