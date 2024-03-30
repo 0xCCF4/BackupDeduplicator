@@ -24,18 +24,18 @@ type FileIdType = u128; // high-res file-id
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct HandleIdentifier {
-    pub inode: DeviceIdType,
-    pub drive: FileIdType,
+    pub inode: FileIdType,
+    pub drive: DeviceIdType,
 }
 
 pub fn from_path(path: impl AsRef<Path>) -> io::Result<HandleIdentifier> {
     match file_id::get_file_id(path)? {
         FileId::Inode { device_id, inode_number } => Ok(HandleIdentifier {
-            inode: inode_number,
-            drive: device_id,
+            inode: inode_number as FileIdType,
+            drive: device_id as DeviceIdType,
         }),
         FileId::LowRes { volume_serial_number, file_index } => Ok(HandleIdentifier {
-            inode: file_index,
+            inode: file_index as FileIdType,
             drive: volume_serial_number as DeviceIdType,
         }),
         FileId::HighRes { volume_serial_number, file_id } => Ok(HandleIdentifier {

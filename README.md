@@ -6,8 +6,8 @@ files and folders. The output is a minimal duplicated set. Therefore, the tool
 discovers entire duplicated folder structures and not just single files.
 
 Backup Deduplicator solves the problem of having multiple backups of the same
-data, whereas some parts of the data are duplicated. Duplicates are discovered
-and removed to save disk space.
+data, whereas some parts of the data are duplicated. Duplicates can be reviewed
+and removed to save disk space (feature in development).
 
 ## Features
 * **Multi threading**: The tool is able to use multiple threads to speed up the
@@ -37,6 +37,9 @@ and removed to save disk space.
   from different machines can be combined.
 * **Hardlinks**: The tool will be able to detect hardlinks and treat them as not duplicates
   (if set via flags).
+* **Evaluation modes**: Different analysis modes. Allowing for example to set a
+  directory of truth (archival directory) to compare against. Every file/folder already
+  in the truth directory, found elsewhere will be marked as duplicate to remove. 
 
 ## Usage
 The tool is a command line tool. There are two stages: `build` and `analyze`.
