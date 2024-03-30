@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
 
     runs-on: ubuntu-latest
 
@@ -18,5 +18,24 @@ jobs:
       - uses: actions/checkout@v3
       - name: Build
         run: cargo build --verbose
+
       - name: Run tests
-        run: cargo test --verbose
+        # note: we don't handle errors here as the 'mikepenz/action-junit-report' below will fail if there
+        #       was an error
+        run: |
+          cargo test  -- -Z unstable-options --format json --report-time | tee results.json
+
+      - name: Prepare junit report
+        id: cargo_reporter
+        uses: innoq/action-cargo-test-report
+        with:
+          cargo-test-report-json: 'results.json'
+
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@main
+        if: always() # always run even if the previous step fails
+        with:
+          check_name: Test Report
+          fail_on_failure: true
+          require_tests: true
+          summary: ${{ steps.cargo_reporter.outputs.summary }}
