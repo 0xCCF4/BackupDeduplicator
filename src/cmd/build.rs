@@ -12,7 +12,7 @@ mod worker;
 
 pub struct BuildSettings {
     pub directory: PathBuf,
-    pub into_archives: bool,
+    // pub into_archives: bool,
     pub follow_symlinks: bool,
     pub output: PathBuf,
     pub absolute_paths: bool,

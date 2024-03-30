@@ -17,10 +17,6 @@ struct Arguments {
     /// If not set, the tool will use the number of logical cores on the system.
     #[arg(short, long)]
     threads: Option<usize>,
-    /// Dry-run
-    /// If set, the tool will not move any files but only print the actions it would take.
-    #[arg(short = 'n', long, default_value = "false")]
-    dry_run: bool,
     /// Be verbose, if set, the tool will print more information about the actions it takes. Setting the RUST_LOG env var overrides this flag.
     #[arg(short, long, default_value = "false")]
     verbose: bool,
@@ -39,9 +35,9 @@ enum Command {
         /// The directory to analyze
         #[arg()]
         directory: String,
-        /// Traverse into archives
+        /* /// Traverse into archives
         #[arg(short, long)]
-        archives: bool,
+        archives: bool, */
         /// Follow symlinks, if set, the tool will not follow symlinks
         #[arg(long)]
         follow_symlinks: bool,
@@ -58,13 +54,14 @@ enum Command {
         /// Force overwrite, if set, the tool will overwrite the output file if it exists. If not set, the tool will continue an existing analysis
         #[arg(long="overwrite", default_value = "false")]
         recreate_output: bool,
-        /// Hash algorithm to use
+        /// Hash algorithm to use (values: sha256, sha512, sha1, xxh64, xxh32)
         #[arg(long="hash", default_value = "sha256")]
         hash_type: String,
         /// Disable database clean after run, if set the tool will not clean the database after the creation
         #[arg(long="noclean", default_value = "false")]
         no_clean: bool,
     },
+    /// Clean a hash-tree file. Removes all files that are not existing anymore. Removes old file versions.
     Clean {
         /// The hash tree file to clean
         #[arg(short, long, default_value = "hash_tree.bdd")]
@@ -97,25 +94,6 @@ enum Command {
         #[arg(long="overwrite", default_value = "false")]
         overwrite: bool,
     },
-    /*
-    /// Update a hash-tree with the given directory
-    /// This command will update by checking if the file sizes or modification times have changed.
-    Update {
-        /// The directory to analyze
-        #[arg()]
-        directory: String,
-        /// The hash tree file to update
-        #[arg(short, long, default_value = "hash_tree.bdd")]
-        input: String,
-        /// Traverse into archives
-        #[arg(short, long)]
-        archives: bool,
-        /// Working directory, if set, the tool will use the current working directory as the base for relative paths.
-        #[arg(long)]
-        working_directory: Option<String>,
-    },
-    
-    */
 }
 
 fn main() {
@@ -135,10 +113,6 @@ fn main() {
     env_logger::init();
 
     trace!("Initializing program");
-
-    if args.dry_run {
-        info!("Running in dry-run mode");
-    }
     
     if let Some(threads) = args.threads {
         if threads <= 0 {
@@ -153,7 +127,7 @@ fn main() {
     match args.command {
         Command::Build {
             directory,
-            archives,
+            // archives,
             follow_symlinks,
             output,
             absolute_paths,
@@ -211,7 +185,7 @@ fn main() {
             });
 
             info!("Target directory: {:?}", directory);
-            info!("Archives: {:?}", archives);
+            // info!("Archives: {:?}", archives);
             info!("Follow symlinks: {:?}", follow_symlinks);
             info!("Output: {:?}", output);
             info!("Absolute paths: {:?}", absolute_paths);
@@ -221,7 +195,7 @@ fn main() {
 
             match backup_deduplicator::build::run(BuildSettings {
                 directory: directory.to_path_buf(),
-                into_archives: archives,
+                //into_archives: archives,
                 follow_symlinks,
                 output: output.clone(),
                 absolute_paths,
