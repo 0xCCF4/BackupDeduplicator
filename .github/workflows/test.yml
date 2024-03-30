@@ -15,8 +15,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Build
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8.0
+        with:
+          toolchain: "stable"
+
+      - name: Build with stable toolchain
+        run: cargo build --verbose
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8.0
+        with:
+          toolchain: "nightly"
+
+      - name: Build with nightly toolchain
         run: cargo build --verbose
 
       - name: Run tests
