@@ -72,8 +72,20 @@ impl GeneralHashType {
 }
 
 impl FromStr for GeneralHashType {
+    /// Error type for parsing a `GeneralHashType` from a string.
     type Err = &'static str;
 
+    /// Parses a string into a `GeneralHashType`.
+    /// 
+    /// # Arguments
+    /// * `s` - The string to parse.
+    /// 
+    /// # Returns
+    /// The `GeneralHashType` that corresponds to the string or an error.
+    /// 
+    /// # Errors
+    /// Returns an error if the string does not correspond to a `GeneralHashType`.
+    /// Returns the available hash types in the error message.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
             "SHA512" => Ok(GeneralHashType::SHA512),
@@ -88,6 +100,16 @@ impl FromStr for GeneralHashType {
 }
 
 impl Display for GeneralHashType {
+    /// Converts a `GeneralHashType` into a string.
+    /// 
+    /// # Arguments
+    /// * `f` - The formatter to write to.
+    /// 
+    /// # Returns
+    /// A result indicating whether the operation was successful.
+    /// 
+    /// # Errors
+    /// Never
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             GeneralHashType::SHA512 => write!(f, "SHA512"),
