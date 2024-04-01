@@ -1,3 +1,6 @@
+#![doc = include_str!("../README.md")]
+#![doc = include_str!("lib.md")]
+
 extern crate num_cpus;
 
 pub mod utils;

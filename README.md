@@ -84,6 +84,16 @@ The tool is written in Rust, and can be installed using `cargo`:
 cargo install backup-deduplicator
 ```
 
+Precompiled binaries are available for download on the release page
+<https://github.com/0xCCF4/BackupDeduplicator/releases>.
+
+## Features Flags
+The tool uses the rust features flags to enable or disable certain features.
+The following flags are available:
+* `hash-sha1`: Use the [sha1](https://crates.io/crates/sha1) module to enable SHA1 hash function
+* `hash-sha2`: Use the [sha2](https://crates.io/crates/sha2) module to enable SHA512, SHA256 hash functions
+* `hash-xxh`: Use the [xxhash-rust](https://crates.io/crates/xxhash-rust) module to enable XXH3 (32/64) hash functions
+
 ## Contribution
 Contributions to PhotoSort are welcome! If you have a feature request,
 bug report, or want to contribute to the code, please open an
