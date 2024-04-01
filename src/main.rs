@@ -54,7 +54,7 @@ enum Command {
         /// Force overwrite, if set, the tool will overwrite the output file if it exists. If not set, the tool will continue an existing analysis
         #[arg(long="overwrite", default_value = "false")]
         recreate_output: bool,
-        /// Hash algorithm to use (values: sha256, sha512, sha1, xxh64, xxh32)
+        /// Hash algorithm to use
         #[arg(long="hash", default_value = "sha256")]
         hash_type: String,
         /// Disable database clean after run, if set the tool will not clean the database after the creation
