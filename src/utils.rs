@@ -128,6 +128,7 @@ impl Write for NullWriter {
     fn flush(&mut self) -> std::io::Result<()> {Ok(())}
 }
 
+/// Utility functions for the main function of `backup-deduplicator`.
 pub mod main {
     use std::env;
     use std::path::PathBuf;
