@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
-use crate::data::{File, FilePath};
+use crate::file::File;
+use crate::path::FilePath;
 
 pub type SharedJob = Arc<Job>;
 

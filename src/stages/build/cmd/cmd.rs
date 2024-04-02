@@ -4,11 +4,13 @@ use std::path::{PathBuf};
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
-use crate::build::worker::{worker_run, WorkerArgument};
-use crate::data::{FilePath, GeneralHashType, Job, PathTarget, ResultTrait, File, SaveFile, SaveFileEntryRef, SaveFileEntry};
-use crate::threadpool::ThreadPool;
-
-mod worker;
+use crate::file::File;
+use crate::hash::GeneralHashType;
+use crate::path::{FilePath, PathTarget};
+use crate::pool::ThreadPool;
+use crate::stages::build::cmd::job::{Job, ResultTrait};
+use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
+use crate::stages::build::output::{SaveFile, SaveFileEntry, SaveFileEntryRef};
 
 pub struct BuildSettings {
     pub directory: PathBuf,
@@ -23,13 +25,13 @@ pub struct BuildSettings {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct JobResultContent {
-    already_cached: bool,
-    content: File,
+pub struct JobResultContent {
+    pub already_cached: bool,
+    pub content: File,
 }
 
 #[derive(Debug, Serialize, Clone)]
-enum JobResult {
+pub enum JobResult {
     Final(JobResultContent),
     Intermediate(JobResultContent),
 }

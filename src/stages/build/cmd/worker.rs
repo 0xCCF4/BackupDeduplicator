@@ -1,3 +1,4 @@
+use crate::file::{OtherInformation, StubInformation};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
@@ -5,12 +6,16 @@ use std::sync::mpsc::Sender;
 use std::time::SystemTime;
 use anyhow::anyhow;
 use log::{error, info, trace, warn};
-use crate::build::{JobResult, JobResultContent};
-use crate::build::worker::directory::worker_run_directory;
-use crate::build::worker::file::worker_run_file;
-use crate::build::worker::other::worker_run_other;
-use crate::build::worker::symlink::worker_run_symlink;
-use crate::data::{File, FilePath, GeneralHashType, Job, OtherInformation, SaveFileEntry, StubInformation};
+use crate::file::File;
+use crate::hash::GeneralHashType;
+use crate::path::FilePath;
+use crate::stages::build::cmd::job::Job;
+use crate::stages::build::cmd::{JobResult, JobResultContent};
+use crate::stages::build::cmd::worker::directory::worker_run_directory;
+use crate::stages::build::cmd::worker::file::worker_run_file;
+use crate::stages::build::cmd::worker::other::worker_run_other;
+use crate::stages::build::cmd::worker::symlink::worker_run_symlink;
+use crate::stages::build::output::SaveFileEntry;
 
 mod directory;
 mod file;

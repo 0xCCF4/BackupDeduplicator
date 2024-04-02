@@ -3,8 +3,10 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use log::error;
-use crate::data::{FilePath, JobTrait, ResultTrait, SaveFileEntry, SaveFileEntryType};
-use super::analysis::{DirectoryInformation, AnalysisFile, FileInformation, OtherInformation, SymlinkInformation};
+use crate::path::FilePath;
+use crate::stages::analyze::output::{AnalysisFile, DirectoryInformation, FileInformation, OtherInformation, SymlinkInformation};
+use crate::stages::build::cmd::job::{JobTrait, ResultTrait};
+use crate::stages::build::output::{SaveFileEntry, SaveFileEntryType};
 
 #[derive(Debug)]
 pub struct MarkedIntermediaryFile {

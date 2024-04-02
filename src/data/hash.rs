@@ -1,12 +1,13 @@
+use crate::utils;
 use std::fmt;
 use std::fmt::Display;
 use std::path::Path;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::de::Error;
-use crate::data::{File, FilePath};
-use crate::utils;
 use const_format::concatcp;
+use crate::file::File;
+use crate::path::FilePath;
 
 
 /// `GeneralHashType` is an enum that represents the different types of hash functions that can be used.
@@ -23,7 +24,7 @@ use const_format::concatcp;
 /// # Examples
 /// ```
 /// use std::str::FromStr;
-/// use backup_deduplicator::data::GeneralHashType;
+/// use backup_deduplicator::hash::GeneralHashType;
 ///
 /// let hash_type = GeneralHashType::from_str("SHA256").unwrap();
 /// let mut hasher = hash_type.hasher();
@@ -99,7 +100,7 @@ impl GeneralHashType {
     /// 
     /// # Examples
     /// ```
-    /// use backup_deduplicator::data::GeneralHashType;
+    /// use backup_deduplicator::hash::GeneralHashType;
     /// 
     /// let supported = GeneralHashType::supported_algorithms();
     /// println!("Supported algorithms: {}", supported);
@@ -195,7 +196,7 @@ impl Display for GeneralHashType {
 /// # Examples
 /// ```
 /// use std::str::FromStr;
-/// use backup_deduplicator::data::{GeneralHash, GeneralHashType};
+/// use backup_deduplicator::hash::{GeneralHash, GeneralHashType};
 ///
 /// let hash = GeneralHash::from_str("SHA256:315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3").unwrap();
 ///
@@ -422,7 +423,7 @@ impl GeneralHash {
     ///
     /// # Examples
     /// ```
-    /// use backup_deduplicator::data::{GeneralHash, GeneralHashType};
+    /// use backup_deduplicator::hash::{GeneralHash, GeneralHashType};
     ///
     /// #[cfg(feature = "hash-sha2")]
     /// {

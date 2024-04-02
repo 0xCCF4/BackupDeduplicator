@@ -1,3 +1,4 @@
+use crate::stages::analyze::worker::MarkedIntermediaryFile;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -7,10 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Result};
 use log::{error, info, trace};
-use crate::analyze::analysis::{AnalysisFile, ResultEntryRef};
-use crate::analyze::worker::{AnalysisJob, AnalysisResult, MarkedIntermediaryFile, WorkerArgument};
-use crate::data::{GeneralHash, SaveFile, SaveFileEntry, SaveFileEntryType};
-use crate::threadpool::ThreadPool;
+use crate::hash::GeneralHash;
+use crate::pool::ThreadPool;
+use crate::stages::analyze::output::{AnalysisFile, ResultEntryRef};
+use crate::stages::analyze::worker::{AnalysisJob, AnalysisResult, worker_run, WorkerArgument};
+use crate::stages::build::output::{SaveFile, SaveFileEntry, SaveFileEntryType};
 use crate::utils::NullWriter;
 
 pub struct AnalysisSettings {
@@ -89,7 +91,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         });
     }
 
-    let pool: ThreadPool<AnalysisJob, AnalysisResult> = ThreadPool::new(args, crate::cmd::analyze::worker::worker_run);
+    let pool: ThreadPool<AnalysisJob, AnalysisResult> = ThreadPool::new(args, worker_run);
     
     for entry in &all_files {
         pool.publish(AnalysisJob::new(Arc::clone(entry)));
@@ -230,6 +232,3 @@ fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, V
     
     return result_size;
 }
-
-mod worker;
-pub mod analysis;

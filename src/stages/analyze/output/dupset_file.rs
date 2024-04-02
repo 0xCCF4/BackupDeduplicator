@@ -1,7 +1,9 @@
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
-use crate::data::{FilePath, GeneralHash, SaveFileEntryType};
+use crate::hash::GeneralHash;
+use crate::path::FilePath;
+use crate::stages::build::output::SaveFileEntryType;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AnalysisFile {

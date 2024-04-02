@@ -2,11 +2,12 @@ use std::{env};
 use std::str::FromStr;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, LevelFilter, trace};
-use backup_deduplicator::build::BuildSettings;
-use backup_deduplicator::{analyze, clean, main};
-use backup_deduplicator::analyze::AnalysisSettings;
-use backup_deduplicator::clean::CleanSettings;
-use backup_deduplicator::data::GeneralHashType;
+use backup_deduplicator::hash::GeneralHashType;
+use backup_deduplicator::stages::analyze::cmd::AnalysisSettings;
+use backup_deduplicator::stages::{analyze, build, clean};
+use backup_deduplicator::stages::build::cmd::BuildSettings;
+use backup_deduplicator::stages::clean::cmd::CleanSettings;
+use backup_deduplicator::utils;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -150,9 +151,9 @@ fn main() {
 
             // Convert to paths and check if they exist
 
-            let directory = main::utils::parse_path(directory.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
-            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
-            let working_directory = working_directory.map(|w| main::utils::parse_path(w.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting));
+            let directory = utils::main::parse_path(directory.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
+            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
+            let working_directory = working_directory.map(|w| utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting));
 
             if !directory.exists() {
                 eprintln!("Target directory does not exist: {}", directory.display());
@@ -175,7 +176,7 @@ fn main() {
             // Change working directory
             trace!("Changing working directory");
 
-            let working_directory = main::utils::change_working_directory(working_directory);
+            let working_directory = utils::main::change_working_directory(working_directory);
 
             // Convert paths to relative path to working directory
 
@@ -193,7 +194,7 @@ fn main() {
 
             // Run the command
 
-            match backup_deduplicator::build::run(BuildSettings {
+            match build::cmd::run(BuildSettings {
                 directory: directory.to_path_buf(),
                 //into_archives: archives,
                 follow_symlinks,
@@ -208,7 +209,7 @@ fn main() {
                     
                     if !no_clean {
                         info!("Executing clean command");
-                        match clean::run(CleanSettings {
+                        match clean::cmd::run(CleanSettings {
                             input: output.clone(),
                             output: output,
                             root: None,
@@ -239,13 +240,13 @@ fn main() {
             working_directory,
             follow_symlinks
         } => {
-            let input = main::utils::parse_path(input.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
-            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+            let input = utils::main::parse_path(input.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
+            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
 
             // Change working directory
             trace!("Changing working directory");
 
-            main::utils::change_working_directory(working_directory.map(|w| main::utils::parse_path(w.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting)));
+            utils::main::change_working_directory(working_directory.map(|w| utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting)));
 
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
@@ -257,7 +258,7 @@ fn main() {
                 std::process::exit(exitcode::CONFIG);
             }
             
-            match clean::run(CleanSettings {
+            match clean::cmd::run(CleanSettings {
                 input,
                 output,
                 root,
@@ -278,8 +279,8 @@ fn main() {
             output,
             overwrite
         } => {
-            let input = main::utils::parse_path(input.as_str(), main::utils::ParsePathKind::AbsoluteExisting);
-            let output = main::utils::parse_path(output.as_str(), main::utils::ParsePathKind::AbsoluteNonExisting);
+            let input = utils::main::parse_path(input.as_str(), utils::main::ParsePathKind::AbsoluteExisting);
+            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
 
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
@@ -291,7 +292,7 @@ fn main() {
                 std::process::exit(exitcode::CONFIG);
             }
 
-            match analyze::run(AnalysisSettings {
+            match analyze::cmd::run(AnalysisSettings {
                 input,
                 output,
                 threads: args.threads,

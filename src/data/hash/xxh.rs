@@ -1,5 +1,5 @@
 use xxhash_rust::{xxh32, xxh64};
-use crate::data::{GeneralHash, GeneralHasher};
+use crate::hash::{GeneralHash, GeneralHasher};
 
 pub struct Xxh64Hasher {
     hasher: xxh64::Xxh64

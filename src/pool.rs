@@ -3,7 +3,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 use log::{debug, error, trace, warn};
-use crate::data::{JobTrait, ResultTrait};
+use crate::stages::build::cmd::job::{JobTrait, ResultTrait};
 
 /// Worker entry function signature
 /// The worker entry function is called by the worker thread to process a job.

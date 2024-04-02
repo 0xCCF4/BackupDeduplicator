@@ -1,4 +1,6 @@
-use crate::data::{DirectoryInformation, File, FileInformation, GeneralHash, OtherInformation, SaveFileEntryTypeV1, SaveFileEntryV1, SaveFileEntryV1Ref, StubInformation, SymlinkInformation};
+use crate::file::{DirectoryInformation, File, FileInformation, OtherInformation, StubInformation, SymlinkInformation};
+use crate::hash::GeneralHash;
+use crate::stages::build::output::{SaveFileEntryTypeV1, SaveFileEntryV1, SaveFileEntryV1Ref};
 
 impl From<FileInformation> for SaveFileEntryV1 {
     fn from(value: FileInformation) -> Self {

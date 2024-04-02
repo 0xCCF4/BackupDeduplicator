@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::trace;
-use crate::build::JobResult;
-use crate::build::worker::{worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::data::{File, Job, OtherInformation, SaveFileEntryType};
+use crate::file::{File, OtherInformation};
+use crate::stages::build::cmd::job::Job;
+use crate::stages::build::cmd::JobResult;
+use crate::stages::build::cmd::worker::{worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
+use crate::stages::build::output::SaveFileEntryType;
 
 pub fn worker_run_other(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing other {} > {:?}", id, &job.target_path, path);

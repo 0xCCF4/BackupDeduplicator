@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
-use crate::data::{SaveFile, SaveFileEntryType};
+use crate::stages::build::output::{SaveFile, SaveFileEntryType};
 
 pub struct CleanSettings {
     pub input: PathBuf,

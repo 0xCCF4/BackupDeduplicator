@@ -1,5 +1,5 @@
 use sha1::Digest;
-use crate::data::{GeneralHash, GeneralHasher};
+use crate::hash::{GeneralHash, GeneralHasher};
 
 pub struct Sha1Hasher {
     hasher: sha1::Sha1

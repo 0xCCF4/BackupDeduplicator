@@ -1,6 +1,7 @@
 use std::path::{PathBuf};
 use serde::{Deserialize, Serialize};
-use crate::data::{FilePath, GeneralHash};
+use crate::hash::GeneralHash;
+use crate::path::FilePath;
 
 // type ResolveNodeFn = fn(&HandleIdentifier) -> Result<Rc<RefCell<FileContainer>>>;
 // type PathInScopeFn = fn(&Path) -> bool;

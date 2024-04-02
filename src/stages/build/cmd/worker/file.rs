@@ -1,10 +1,14 @@
+use crate::stages::build::cmd::worker::GeneralHashType;
+use crate::hash::GeneralHash;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::build::JobResult;
-use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::data::{GeneralHash, Job, GeneralHashType, File, FileInformation, SaveFileEntryType};
+use crate::file::{File, FileInformation};
+use crate::stages::build::cmd::job::Job;
+use crate::stages::build::cmd::JobResult;
+use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
+use crate::stages::build::output::SaveFileEntryType;
 
 pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);

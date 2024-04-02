@@ -8,9 +8,6 @@ use anyhow::Result;
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 
-use crate::data::{FilePath, GeneralHash, GeneralHashType};
-use crate::utils;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SaveFileVersion {
     V1,
@@ -42,6 +39,9 @@ pub struct SaveFileEntryV1 {
     pub children: Vec<GeneralHash>,
 }
 pub use SaveFileEntryV1 as SaveFileEntry;
+use crate::hash::{GeneralHash, GeneralHashType};
+use crate::path::FilePath;
+use crate::utils;
 
 #[derive(Debug, Serialize)]
 pub struct SaveFileEntryV1Ref<'a> {
@@ -53,8 +53,6 @@ pub struct SaveFileEntryV1Ref<'a> {
     pub children: Vec<&'a GeneralHash>,
 }
 pub type SaveFileEntryRef<'a> = SaveFileEntryV1Ref<'a>;
-
-pub mod converter;
 
 pub struct SaveFile<'a, W, R> where W: Write, R: BufRead {
     pub header: SaveFileHeaders,
