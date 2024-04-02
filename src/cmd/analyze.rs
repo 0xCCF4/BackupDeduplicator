@@ -11,6 +11,7 @@ use crate::analyze::analysis::{AnalysisFile, ResultEntryRef};
 use crate::analyze::worker::{AnalysisJob, AnalysisResult, MarkedIntermediaryFile, WorkerArgument};
 use crate::data::{GeneralHash, SaveFile, SaveFileEntry, SaveFileEntryType};
 use crate::threadpool::ThreadPool;
+use crate::utils::NullWriter;
 
 pub struct AnalysisSettings {
     pub input: PathBuf,
@@ -43,9 +44,10 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     };
 
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
+    let mut null_out_writer = NullWriter::new();
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
-    let mut save_file = SaveFile::new(&mut output_buf_writer, &mut input_buf_reader, true, true, true);
+    let mut save_file = SaveFile::new(&mut null_out_writer, &mut input_buf_reader, true, true, true);
     save_file.load_header()?;
 
     save_file.load_all_entries_no_filter()?;
@@ -175,6 +177,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 struct SetKey<'a> {
     size: u64,
     ftype: &'a SaveFileEntryType,
+    children: &'a Vec<GeneralHash>,
 }
 fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, Vec<Arc<SaveFileEntry>>>, output_buf_writer: &mut std::io::BufWriter<&fs::File>) -> u64 {
     let hash = match file {
@@ -191,7 +194,8 @@ fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, V
     for file in file_by_hash.get(hash).unwrap() {
         sets.entry(SetKey {
             size: file.size,
-            ftype: &file.file_type
+            ftype: &file.file_type,
+            children: &file.children,
         }).or_insert(Vec::new()).push(file);
     }
     

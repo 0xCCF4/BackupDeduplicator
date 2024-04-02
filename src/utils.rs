@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{anyhow, Result};
@@ -84,4 +85,45 @@ pub fn get_time() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// A writer that discards all data.
+/// 
+/// # Example
+/// ```
+/// use std::io::Write;
+/// 
+/// let mut writer = backup_deduplicator::utils::NullWriter::new();
+/// writer.write(b"Hello, world!").unwrap();
+/// ```
+pub struct NullWriter {}
+
+impl NullWriter {
+    /// Create a new NullWriter.
+    /// 
+    /// # Returns
+    /// A new NullWriter.
+    pub fn new() -> Self {
+        NullWriter {}
+    }
+}
+
+impl Write for NullWriter {
+    /// Discard all data.
+    /// 
+    /// # Arguments
+    /// * `buf` - The data to write.
+    /// 
+    /// # Returns
+    /// The number of bytes written. Always the same as the length of `buf`.
+    /// 
+    /// # Errors
+    /// Never
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {Ok(buf.len())}
+
+    /// Flush the writer.
+    /// 
+    /// # Errors
+    /// Never
+    fn flush(&mut self) -> std::io::Result<()> {Ok(())}
 }
