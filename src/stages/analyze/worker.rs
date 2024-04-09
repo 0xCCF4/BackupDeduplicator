@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use log::error;
 use crate::path::FilePath;
+use crate::pool::{JobTrait, ResultTrait};
 use crate::stages::analyze::output::{AnalysisFile, DirectoryInformation, FileInformation, OtherInformation, SymlinkInformation};
-use crate::stages::build::cmd::job::{JobTrait, ResultTrait};
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 
 #[derive(Debug)]

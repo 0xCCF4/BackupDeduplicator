@@ -3,7 +3,18 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 use log::{debug, error, trace, warn};
-use crate::stages::build::cmd::job::{JobTrait, ResultTrait};
+
+/// A trait that must be implemented by a job type to be processed by the pool.
+pub trait JobTrait<T: Send = Self> {
+    /// Get the job id.
+    /// 
+    /// # Returns
+    /// * `usize` - The job id.
+    fn job_id(&self) -> usize;
+}
+
+/// A trait that must be implemented by a result type to be returned by the pool.
+pub trait ResultTrait<T: Send = Self> {}
 
 /// Worker entry function signature
 /// The worker entry function is called by the worker thread to process a job.

@@ -3,12 +3,10 @@ use std::fs;
 use std::path::{PathBuf};
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
-use serde::Serialize;
-use crate::file::File;
 use crate::hash::GeneralHashType;
 use crate::path::{FilePath, PathTarget};
 use crate::pool::ThreadPool;
-use crate::stages::build::cmd::job::{Job, ResultTrait};
+use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryRef};
 
@@ -22,22 +20,6 @@ pub struct BuildSettings {
     
     pub hash_type: GeneralHashType,
     pub continue_file: bool,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct JobResultContent {
-    pub already_cached: bool,
-    pub content: File,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub enum JobResult {
-    Final(JobResultContent),
-    Intermediate(JobResultContent),
-}
-
-impl ResultTrait for JobResult {
-    
 }
 
 pub fn run(
@@ -105,10 +87,10 @@ pub fn run(
         });
     }
     
-    let pool: ThreadPool<Job, JobResult> = ThreadPool::new(args, worker_run);
+    let pool: ThreadPool<BuildJob, JobResult> = ThreadPool::new(args, worker_run);
 
     let root_file = FilePath::from_path(build_settings.directory, PathTarget::File);
-    let root_job = Job::new(None, root_file);
+    let root_job = BuildJob::new(None, root_file);
     
     pool.publish(root_job);
 

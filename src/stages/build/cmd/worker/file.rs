@@ -5,12 +5,11 @@ use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
 use crate::file::{File, FileInformation};
-use crate::stages::build::cmd::job::Job;
-use crate::stages::build::cmd::JobResult;
+use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::stages::build::output::HashTreeFileEntryType;
 
-pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
 
     match worker_fetch_savedata(arg, &job.target_path) {

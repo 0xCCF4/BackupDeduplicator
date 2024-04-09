@@ -7,16 +7,15 @@ use std::sync::mpsc::Sender;
 use log::{error, trace};
 use crate::file::{DirectoryInformation, File};
 use crate::hash::GeneralHash;
-use crate::stages::build::cmd::job::{Job, JobState};
-use crate::stages::build::cmd::JobResult;
+use crate::stages::build::cmd::job::{BuildJob, BuildJobState, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::stages::build::output::HashTreeFileEntryType;
 
-pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {} > {:?}", id, &job.target_path, path);
 
     match job.state {
-        JobState::NotProcessed => {
+        BuildJobState::NotProcessed => {
             let read_dir = fs::read_dir(&path);
             let read_dir = match read_dir {
                 Ok(read_dir) => read_dir,
@@ -47,13 +46,13 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 children.push(child_path);
             }
 
-            job.state = JobState::Analyzed;
+            job.state = BuildJobState::Analyzed;
 
             let parent_job = Arc::new(job);
             let mut jobs = Vec::with_capacity(children.len());
 
             for child in children {
-                let job = Job::new(Some(Arc::clone(&parent_job)), child);
+                let job = BuildJob::new(Some(Arc::clone(&parent_job)), child);
                 jobs.push(job);
             }
 
@@ -68,7 +67,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 }
             }
         },
-        JobState::Analyzed => {
+        BuildJobState::Analyzed => {
             let mut hash = GeneralHash::from_type(arg.hash_type);
             let mut children = Vec::new();
 
