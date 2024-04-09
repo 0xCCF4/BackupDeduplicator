@@ -10,7 +10,7 @@ use crate::hash::GeneralHash;
 use crate::stages::build::cmd::job::{Job, JobState};
 use crate::stages::build::cmd::JobResult;
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::stages::build::output::SaveFileEntryType;
+use crate::stages::build::output::HashTreeFileEntryType;
 
 pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {} > {:?}", id, &job.target_path, path);
@@ -83,7 +83,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                     // query cache
                     match worker_fetch_savedata(arg, &job.target_path) {
                         Some(found) => {
-                            if found.file_type == SaveFileEntryType::Directory && found.modified == modified && found.size == finished.len() as u64 {
+                            if found.file_type == HashTreeFileEntryType::Directory && found.modified == modified && found.size == finished.len() as u64 {
                                 if found.children.len() == finished.len() && found.children.iter().zip(finished.iter().map(|e| e.get_content_hash())).all(|(a, b)| a == b) {
                                     trace!("Directory {:?} is already in save file", path);
 

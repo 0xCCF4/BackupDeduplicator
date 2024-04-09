@@ -56,7 +56,7 @@ ENTRY [newline]
 ENTRY [newline]
 ...
 ```
-See `SaveFileEntry` for the exact format of an entry. In short, it contains
+See `HashTreeFileEntry` for the exact format of an entry. In short, it contains
 every information about an analyzed file or directory that is needed for later
 stages (JSON):
 * File path

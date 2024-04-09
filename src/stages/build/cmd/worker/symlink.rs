@@ -7,14 +7,14 @@ use crate::file::{File, SymlinkInformation};
 use crate::hash::GeneralHash;
 use crate::stages::build::cmd::JobResult;
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::stages::build::output::SaveFileEntryType;
+use crate::stages::build::output::HashTreeFileEntryType;
 
 pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing symlink {} > {:?}", id, &job.target_path, path);
     
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {
-            if found.file_type == SaveFileEntryType::Symlink && found.modified == modified && found.size == size {
+            if found.file_type == HashTreeFileEntryType::Symlink && found.modified == modified && found.size == size {
                 trace!("Symlink {:?} is already in save file", path);
                 let target_link = fs::read_link(&path);
                 let target_link = match target_link {

@@ -1,9 +1,9 @@
 
 pub mod output {
     pub mod converter;
-    mod hashtree_file;
+    mod hashtreefile;
     
-    pub use hashtree_file::*;
+    pub use hashtreefile::*;
 }
 
 pub mod cmd {

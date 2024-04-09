@@ -8,14 +8,14 @@ use crate::file::{File, FileInformation};
 use crate::stages::build::cmd::job::Job;
 use crate::stages::build::cmd::JobResult;
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::stages::build::output::SaveFileEntryType;
+use crate::stages::build::output::HashTreeFileEntryType;
 
 pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
 
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {
-            if found.file_type == SaveFileEntryType::File && found.modified == modified && found.size == size {
+            if found.file_type == HashTreeFileEntryType::File && found.modified == modified && found.size == size {
                 trace!("File {:?} is already in save file", path);
                 worker_publish_result_or_trigger_parent(id, true, File::File(FileInformation {
                     path: job.target_path.clone(),

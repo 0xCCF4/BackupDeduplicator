@@ -15,7 +15,7 @@ use crate::stages::build::cmd::worker::directory::worker_run_directory;
 use crate::stages::build::cmd::worker::file::worker_run_file;
 use crate::stages::build::cmd::worker::other::worker_run_other;
 use crate::stages::build::cmd::worker::symlink::worker_run_symlink;
-use crate::stages::build::output::SaveFileEntry;
+use crate::stages::build::output::HashTreeFileEntry;
 
 mod directory;
 mod file;
@@ -25,7 +25,7 @@ mod symlink;
 pub struct WorkerArgument {
     pub follow_symlinks: bool,
     pub hash_type: GeneralHashType,
-    pub save_file_by_path: Arc<HashMap<FilePath, SaveFileEntry>>,
+    pub save_file_by_path: Arc<HashMap<FilePath, HashTreeFileEntry>>,
 }
 
 pub fn worker_run(id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
@@ -154,6 +154,6 @@ fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: File
     }
 }
 
-fn worker_fetch_savedata<'a, 'b>(args: &'a WorkerArgument, path: &'b FilePath) -> Option<&'a SaveFileEntry> {
+fn worker_fetch_savedata<'a, 'b>(args: &'a WorkerArgument, path: &'b FilePath) -> Option<&'a HashTreeFileEntry> {
     args.save_file_by_path.get(path)
 }

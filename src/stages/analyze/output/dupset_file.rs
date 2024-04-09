@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use crate::hash::GeneralHash;
 use crate::path::FilePath;
-use crate::stages::build::output::SaveFileEntryType;
+use crate::stages::build::output::HashTreeFileEntryType;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AnalysisFile {
@@ -64,7 +64,7 @@ pub struct OtherInformation {
 
 #[derive(Debug, Serialize)]
 pub struct ResultEntryRef<'a, 'b, 'c> {
-    pub ftype: &'a SaveFileEntryType,
+    pub ftype: &'a HashTreeFileEntryType,
     pub size: u64,
     pub hash: &'b GeneralHash,
     pub conflicting: Vec<&'c FilePath>,

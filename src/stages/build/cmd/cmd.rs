@@ -10,7 +10,7 @@ use crate::path::{FilePath, PathTarget};
 use crate::pool::ThreadPool;
 use crate::stages::build::cmd::job::{Job, ResultTrait};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
-use crate::stages::build::output::{SaveFile, SaveFileEntry, SaveFileEntryRef};
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryRef};
 
 pub struct BuildSettings {
     pub directory: PathBuf,
@@ -65,7 +65,7 @@ pub fn run(
     let mut result_in = std::io::BufReader::new(&result_file);
     let mut result_out = std::io::BufWriter::new(&result_file);
     
-    let mut save_file = SaveFile::new(&mut result_out, &mut result_in, false, true, false);
+    let mut save_file = HashTreeFile::new(&mut result_out, &mut result_in, build_settings.hash_type, false, true, false);
     match save_file.load_header() {
         Ok(_) => {},
         Err(err) => {
@@ -88,7 +88,7 @@ pub fn run(
     save_file.empty_file_by_hash();
     save_file.empty_entry_list();
     
-    let mut file_by_hash: HashMap<FilePath, SaveFileEntry> = HashMap::with_capacity(save_file.file_by_hash.len());
+    let mut file_by_hash: HashMap<FilePath, HashTreeFileEntry> = HashMap::with_capacity(save_file.file_by_hash.len());
     save_file.file_by_path.drain().for_each(|(k, v)| {
         file_by_hash.insert(k, Arc::into_inner(v).expect("There should be no further references to the entry"));
     });
@@ -126,7 +126,7 @@ pub fn run(
         };
         
         if !result.already_cached {
-            let entry = SaveFileEntryRef::from(&result.content);
+            let entry = HashTreeFileEntryRef::from(&result.content);
             save_file.write_entry_ref(&entry)?;
         }
         

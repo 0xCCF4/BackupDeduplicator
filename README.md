@@ -95,7 +95,7 @@ The following flags are available:
 * `hash-xxh`: Use the [xxhash-rust](https://crates.io/crates/xxhash-rust) module to enable XXH3 (32/64) hash functions
 
 ## Contribution
-Contributions to PhotoSort are welcome! If you have a feature request,
+Contributions to the project are welcome! If you have a feature request,
 bug report, or want to contribute to the code, please open an
 issue or a pull request.
 

@@ -11,6 +11,7 @@ keywords = ["archive-management", "file", "deduplication", "cleanup"]
 license = "GPL-3.0-or-later"
 homepage = "https://github.com/0xCCF4/BackupDeduplicator"
 repository = "https://github.com/0xCCF4/BackupDeduplicator"
+documentation = "https://docs.rs/backup-deduplicator"
 
 [dependencies]
 anyhow = "1.0.80"

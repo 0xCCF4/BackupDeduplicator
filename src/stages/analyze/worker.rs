@@ -6,11 +6,11 @@ use log::error;
 use crate::path::FilePath;
 use crate::stages::analyze::output::{AnalysisFile, DirectoryInformation, FileInformation, OtherInformation, SymlinkInformation};
 use crate::stages::build::cmd::job::{JobTrait, ResultTrait};
-use crate::stages::build::output::{SaveFileEntry, SaveFileEntryType};
+use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 
 #[derive(Debug)]
 pub struct MarkedIntermediaryFile {
-    pub saved_file_entry: Arc<SaveFileEntry>,
+    pub saved_file_entry: Arc<HashTreeFileEntry>,
     pub file: Arc<Mutex<Option<Arc<AnalysisFile>>>>,
 }
 
@@ -21,11 +21,11 @@ pub struct WorkerArgument {
 #[derive(Debug)]
 pub struct AnalysisJob {
     id: usize,
-    pub file: Arc<SaveFileEntry>,
+    pub file: Arc<HashTreeFileEntry>,
 }
 
 impl AnalysisJob {
-    pub fn new(file: Arc<SaveFileEntry>) -> Self {
+    pub fn new(file: Arc<HashTreeFileEntry>) -> Self {
         Self {
             id: new_job_counter_id(),
             file,
@@ -82,27 +82,27 @@ fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
     
     if let Some(file) = marked_file {
         let result = match file.saved_file_entry.file_type {
-            SaveFileEntryType::File => {
+            HashTreeFileEntryType::File => {
                 AnalysisFile::File(FileInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Symlink => {
+            HashTreeFileEntryType::Symlink => {
                 AnalysisFile::Symlink(SymlinkInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Other => {
+            HashTreeFileEntryType::Other => {
                 AnalysisFile::Other(OtherInformation {
                     path: file.saved_file_entry.path.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Directory => {
+            HashTreeFileEntryType::Directory => {
                 AnalysisFile::Directory(DirectoryInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),

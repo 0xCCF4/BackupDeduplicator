@@ -8,11 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use anyhow::{anyhow, Result};
 use log::{error, info, trace};
-use crate::hash::GeneralHash;
+use crate::hash::{GeneralHash, GeneralHashType};
 use crate::pool::ThreadPool;
 use crate::stages::analyze::output::{AnalysisFile, ResultEntryRef};
 use crate::stages::analyze::worker::{AnalysisJob, AnalysisResult, worker_run, WorkerArgument};
-use crate::stages::build::output::{SaveFile, SaveFileEntry, SaveFileEntryType};
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use crate::utils::NullWriter;
 
 pub struct AnalysisSettings {
@@ -49,7 +49,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     let mut null_out_writer = NullWriter::new();
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
-    let mut save_file = SaveFile::new(&mut null_out_writer, &mut input_buf_reader, true, true, true);
+    let mut save_file = HashTreeFile::new(&mut null_out_writer, &mut input_buf_reader, GeneralHashType::NULL, true, true, true);
     save_file.load_header()?;
 
     save_file.load_all_entries_no_filter()?;
@@ -178,10 +178,10 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 #[derive(Debug, PartialEq, Hash, Eq)]
 struct SetKey<'a> {
     size: u64,
-    ftype: &'a SaveFileEntryType,
+    ftype: &'a HashTreeFileEntryType,
     children: &'a Vec<GeneralHash>,
 }
-fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, Vec<Arc<SaveFileEntry>>>, output_buf_writer: &mut std::io::BufWriter<&fs::File>) -> u64 {
+fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, Vec<Arc<HashTreeFileEntry>>>, output_buf_writer: &mut std::io::BufWriter<&fs::File>) -> u64 {
     let hash = match file {
         AnalysisFile::File(info) => &info.content_hash,
         AnalysisFile::Directory(info) => &info.content_hash,
@@ -191,7 +191,7 @@ fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, V
         }
     };
     
-    let mut sets: HashMap<SetKey, Vec<&SaveFileEntry>> = HashMap::new();
+    let mut sets: HashMap<SetKey, Vec<&HashTreeFileEntry>> = HashMap::new();
 
     for file in file_by_hash.get(hash).unwrap() {
         sets.entry(SetKey {
