@@ -10,18 +10,39 @@ use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryRef};
 
+/// The settings for the build command.
+/// 
+/// # Fields
+/// * `directory` - The directory to build.
+/// * `follow_symlinks` - Whether to follow symlinks when traversing the file system.
+/// * `output` - The output file to write the hash tree to.
+/// * `threads` - The number of threads to use for building the hash tree. None = number of logical CPUs.
+/// * `hash_type` - The hash algorithm to use for hashing files.
+/// * `continue_file` - Whether to continue an existing hash tree file.
 pub struct BuildSettings {
     pub directory: PathBuf,
     // pub into_archives: bool,
     pub follow_symlinks: bool,
     pub output: PathBuf,
-    pub absolute_paths: bool,
+    // pub absolute_paths: bool,
     pub threads: Option<usize>,
     
     pub hash_type: GeneralHashType,
     pub continue_file: bool,
 }
 
+/// Runs the build command. Hashes a directory and produces a hash tree file.
+/// 
+/// # Arguments
+/// * `build_settings` - The settings for the build command.
+/// 
+/// # Returns
+/// Nothing
+/// 
+/// # Errors
+/// * If the output file cannot be opened.
+/// * If the header cannot be loaded from the output file (if the file is continued).
+/// * If the output file cannot be written to.
 pub fn run(
     build_settings: BuildSettings,
 ) -> Result<()> {
@@ -59,6 +80,7 @@ pub fn run(
         }
     }
     
+    // load all existing entries from the hash tree file
     match save_file.load_all_entries_no_filter() {
         Ok(_) => {},
         Err(err) => {

@@ -47,8 +47,8 @@ enum Command {
         output: String,
         /// Absolute paths, if set, the tool will output absolute paths in the hash tree.
         /// If not set, the tool will output relative paths to the current working directory.
-        #[arg(long)]
-        absolute_paths: bool,
+        // #[arg(long)]
+        // absolute_paths: bool,
         /// Working directory, if set, the tool will use the current working directory as the base for relative paths.
         #[arg(short, long)]
         working_directory: Option<String>,
@@ -131,7 +131,7 @@ fn main() {
             // archives,
             follow_symlinks,
             output,
-            absolute_paths,
+            // absolute_paths,
             working_directory,
             recreate_output,
             hash_type,
@@ -189,7 +189,7 @@ fn main() {
             // info!("Archives: {:?}", archives);
             info!("Follow symlinks: {:?}", follow_symlinks);
             info!("Output: {:?}", output);
-            info!("Absolute paths: {:?}", absolute_paths);
+            // info!("Absolute paths: {:?}", absolute_paths);
             info!("Working directory: {:?}", working_directory);
 
             // Run the command
@@ -199,7 +199,7 @@ fn main() {
                 //into_archives: archives,
                 follow_symlinks,
                 output: output.clone(),
-                absolute_paths,
+                // absolute_paths,
                 threads: args.threads,
                 continue_file: !recreate_output,
                 hash_type
