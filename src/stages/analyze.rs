@@ -7,3 +7,5 @@ pub mod output {
 
 pub mod cmd;
 mod worker;
+
+pub mod intermediary_filetree;

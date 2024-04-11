@@ -53,7 +53,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
             let mut children = Vec::new();
 
             for entry in read_dir {
-                let child_path = job.target_path.child_real(entry.file_name());
+                let child_path = job.target_path.child(entry.file_name());
                 children.push(child_path);
             }
 

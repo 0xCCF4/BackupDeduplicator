@@ -4,7 +4,7 @@ use std::path::{PathBuf};
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use crate::hash::GeneralHashType;
-use crate::path::{FilePath, PathTarget};
+use crate::path::{FilePath};
 use crate::pool::ThreadPool;
 use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
@@ -111,7 +111,7 @@ pub fn run(
     
     let pool: ThreadPool<BuildJob, JobResult> = ThreadPool::new(args, worker_run);
 
-    let root_file = FilePath::from_path(build_settings.directory, PathTarget::File);
+    let root_file = FilePath::from_realpath(build_settings.directory);
     let root_job = BuildJob::new(None, root_file);
     
     pool.publish(root_job);

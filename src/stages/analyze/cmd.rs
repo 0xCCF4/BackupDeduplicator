@@ -1,4 +1,4 @@
-use crate::stages::analyze::worker::MarkedIntermediaryFile;
+use crate::stages::analyze::worker::AnalysisIntermediaryFile;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -10,17 +10,38 @@ use anyhow::{anyhow, Result};
 use log::{error, info, trace};
 use crate::hash::{GeneralHash, GeneralHashType};
 use crate::pool::ThreadPool;
-use crate::stages::analyze::output::{AnalysisFile, ResultEntryRef};
-use crate::stages::analyze::worker::{AnalysisJob, AnalysisResult, worker_run, WorkerArgument};
+use crate::stages::analyze::intermediary_filetree::AnalysisFile;
+use crate::stages::analyze::output::{DupSetEntryRef};
+use crate::stages::analyze::worker::{AnalysisJob, AnalysisResult, worker_run, AnalysisWorkerArgument};
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use crate::utils::NullWriter;
 
+/// The settings for the analysis cmd.
+/// 
+/// # Fields
+/// * `input` - The input file to analyze.
+/// * `output` - The output file to write the results to.
+/// * `threads` - The number of threads to use for the analysis. If None, the number of threads is equal to the number of CPUs.
 pub struct AnalysisSettings {
     pub input: PathBuf,
     pub output: PathBuf,
     pub threads: Option<usize>,
 }
 
+/// Run the analysis cmd.
+/// 
+/// # Arguments
+/// * `analysis_settings` - The settings for the analysis cmd.
+/// 
+/// # Returns
+/// Nothing
+/// 
+/// # Errors
+/// * If the input file cannot be opened.
+/// * If the output file cannot be opened.
+/// * If the header of the input file cannot be loaded.
+/// * If an error occurs while loading entries from the input file.
+/// * If writing to the output file fails.
 pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     let mut input_file_options = fs::File::options();
     input_file_options.read(true);
@@ -60,7 +81,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     let mut all_files = save_file.all_entries;
     
     for (path, entry) in file_by_path.iter_mut() {
-        file_by_path_marked.insert(path.clone(), MarkedIntermediaryFile {
+        file_by_path_marked.insert(path.clone(), AnalysisIntermediaryFile {
             saved_file_entry: Arc::clone(entry),
             file: Arc::new(Mutex::new(None)),
         });
@@ -86,7 +107,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 
     let mut args = Vec::with_capacity(analysis_settings.threads.unwrap_or_else(|| num_cpus::get()));
     for _ in 0..args.capacity() {
-        args.push(WorkerArgument {
+        args.push(AnalysisWorkerArgument {
             file_by_path: Arc::clone(&file_by_path)
         });
     }
@@ -175,12 +196,16 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     Ok(())
 }
 
+/// Used to find duplicates of entries in the hash tree file.
 #[derive(Debug, PartialEq, Hash, Eq)]
 struct SetKey<'a> {
     size: u64,
     ftype: &'a HashTreeFileEntryType,
     children: &'a Vec<GeneralHash>,
 }
+/// Write the result entry to the output file. Find all duplicates of the file and write them to the output file.
+/// If called for every file, it will write all duplicates to the output file.
+/// Writing each file only once
 fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, Vec<Arc<HashTreeFileEntry>>>, output_buf_writer: &mut std::io::BufWriter<&fs::File>) -> u64 {
     let hash = match file {
         AnalysisFile::File(info) => &info.content_hash,
@@ -218,7 +243,7 @@ fn write_result_entry(file: &AnalysisFile, file_by_hash: &HashMap<GeneralHash, V
             conflicting.push(&file.path);
         }
         
-        let result = ResultEntryRef {
+        let result = DupSetEntryRef {
             ftype: &set.0.ftype,
             size: set.0.size,
             hash,
