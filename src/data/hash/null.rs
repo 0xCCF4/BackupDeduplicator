@@ -1,4 +1,4 @@
-use crate::data::{GeneralHash, GeneralHasher};
+use crate::hash::{GeneralHash, GeneralHasher};
 
 pub struct NullHasher {
     

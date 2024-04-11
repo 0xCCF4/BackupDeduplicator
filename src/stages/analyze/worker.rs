@@ -3,31 +3,65 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use log::error;
-use crate::data::{FilePath, JobTrait, ResultTrait, SaveFileEntry, SaveFileEntryType};
-use super::analysis::{DirectoryInformation, AnalysisFile, FileInformation, OtherInformation, SymlinkInformation};
+use crate::path::FilePath;
+use crate::pool::{JobTrait, ResultTrait};
+use crate::stages::analyze::intermediary_analysis_data::{AnalysisFile, AnalysisDirectoryInformation, AnalysisFileInformation, AnalysisOtherInformation, AnalysisSymlinkInformation};
+use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 
+/// The intermediary file for the analysis worker.
+///
+/// # Fields
+/// * `saved_file_entry` - A saved file entry from the hash tree file.
+/// * `file` - Analysis result of the file. Processed by a worker.
 #[derive(Debug)]
-pub struct MarkedIntermediaryFile {
-    pub saved_file_entry: Arc<SaveFileEntry>,
+pub struct AnalysisIntermediaryFile {
+    pub saved_file_entry: Arc<HashTreeFileEntry>,
     pub file: Arc<Mutex<Option<Arc<AnalysisFile>>>>,
 }
 
-pub struct WorkerArgument {
-    pub file_by_path: Arc<HashMap<FilePath, MarkedIntermediaryFile>>,
+/// The argument for the analysis worker main thread.
+/// Files from the hash tree file are stored in a hash map.
+///
+/// # Fields
+/// * `file_by_path` - A hash map of [FilePath] -> [AnalysisIntermediaryFile].
+pub struct AnalysisWorkerArgument {
+    pub file_by_path: Arc<HashMap<FilePath, AnalysisIntermediaryFile>>,
 }
 
+/// The job for the analysis worker.
+///
+/// # Fields
+/// * `id` - The id of the job.
+/// * `file` - The file to analyze.
 #[derive(Debug)]
 pub struct AnalysisJob {
     id: usize,
-    pub file: Arc<SaveFileEntry>,
+    pub file: Arc<HashTreeFileEntry>,
 }
 
 impl AnalysisJob {
-    pub fn new(file: Arc<SaveFileEntry>) -> Self {
+    /// Create a new analysis job.
+    ///
+    /// # Arguments
+    /// * `file` - The file to analyze.
+    ///
+    /// # Returns
+    /// The analysis job.
+    pub fn new(file: Arc<HashTreeFileEntry>) -> Self {
         Self {
             id: new_job_counter_id(),
             file,
         }
+    }
+}
+
+impl JobTrait for AnalysisJob {
+    /// Get the job id.
+    ///
+    /// # Returns
+    /// The job id.
+    fn job_id(&self) -> usize {
+        self.id
     }
 }
 
@@ -39,24 +73,24 @@ fn new_job_counter_id() -> usize {
     (*counter).clone()
 }
 
-impl JobTrait for AnalysisJob {
-    fn job_id(&self) -> usize {
-        self.id
-    }
-}
 
+/// The result for the analysis worker.
 #[derive(Debug)]
-pub struct AnalysisResult {
-    
-}
+pub struct AnalysisResult {}
 
-impl ResultTrait for AnalysisResult {
-
-}
+impl ResultTrait for AnalysisResult {}
 
 
-
-fn parent_file<'a, 'b>(file: &'b MarkedIntermediaryFile, arg: &'a WorkerArgument) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
+/// Get the parent file of a file. Searches the arg.cache for the parent file.
+///
+/// # Arguments
+/// * `file` - The file to get the parent of.
+/// * `arg` - The argument for the worker thread.
+///
+/// # Returns
+/// The parent file and the parent path.
+/// If the parent file is not present, return None.
+fn parent_file<'a, 'b>(file: &'b AnalysisIntermediaryFile, arg: &'a AnalysisWorkerArgument) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
     match file.saved_file_entry.path.parent() {
         None => None,
         Some(parent_path) => {
@@ -73,35 +107,42 @@ fn parent_file<'a, 'b>(file: &'b MarkedIntermediaryFile, arg: &'a WorkerArgument
     }
 }
 
-fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
+/// Recursively process a file. Iterates over the file and its parent files until
+/// the parent file is present or the root is reached.
+///
+/// # Arguments
+/// * `id` - The id of the worker.
+/// * `path` - The path of the file to process.
+/// * `arg` - The argument for the worker thread.
+fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgument) {
     let marked_file = arg.file_by_path.get(path);
     
     let mut attach_parent = None;
     
     if let Some(file) = marked_file {
         let result = match file.saved_file_entry.file_type {
-            SaveFileEntryType::File => {
-                AnalysisFile::File(FileInformation {
+            HashTreeFileEntryType::File => {
+                AnalysisFile::File(AnalysisFileInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Symlink => {
-                AnalysisFile::Symlink(SymlinkInformation {
+            HashTreeFileEntryType::Symlink => {
+                AnalysisFile::Symlink(AnalysisSymlinkInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Other => {
-                AnalysisFile::Other(OtherInformation {
+            HashTreeFileEntryType::Other => {
+                AnalysisFile::Other(AnalysisOtherInformation {
                     path: file.saved_file_entry.path.clone(),
                     parent: Mutex::new(None),
                 })
             },
-            SaveFileEntryType::Directory => {
-                AnalysisFile::Directory(DirectoryInformation {
+            HashTreeFileEntryType::Directory => {
+                AnalysisFile::Directory(AnalysisDirectoryInformation {
                     path: file.saved_file_entry.path.clone(),
                     content_hash: file.saved_file_entry.hash.clone(),
                     children: Mutex::new(Vec::new()),
@@ -120,7 +161,7 @@ fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
                 }
             },
             Err(err) => {
-                panic!("Failed to lock file: {}", err);
+                panic!("[{}] Failed to lock file: {}", id, err);
             }
         }
 
@@ -130,17 +171,17 @@ fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
     }
     
     if let Some((result, parent, parent_path)) = attach_parent {
-        match add_to_parent_as_child(parent, &result) {
+        match add_to_parent_as_child(id, parent, &result) {
             AddToParentResult::Ok => { return; },
             AddToParentResult::ParentDoesNotExist => {
                 // parent does not exist
                 // create it
-                recursive_process_file(&parent_path, arg);
+                recursive_process_file(id, &parent_path, arg);
                 // try to read to parent again
-                match add_to_parent_as_child(parent, &result) {
+                match add_to_parent_as_child(id, parent, &result) {
                     AddToParentResult::Ok => { return; },
                     AddToParentResult::ParentDoesNotExist => {
-                        error!("Parent still does not exist");
+                        error!("[{}] Parent still does not exist", id);
                         return;
                     },
                     AddToParentResult::Error => {
@@ -155,13 +196,28 @@ fn recursive_process_file(path: &FilePath, arg: &WorkerArgument) {
     }
 }
 
+/// The result of adding a file to a parent as child, see [add_to_parent_as_child]
+///
+/// # Variants
+/// * `Ok` - The operation was successful.
+/// * `ParentDoesNotExist` - The parent does not exist.
+/// * `Error` - An error occurred during the operation
 enum AddToParentResult {
     Ok,
     ParentDoesNotExist,
     Error,
 }
 
-fn add_to_parent_as_child(parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child: &Arc<AnalysisFile>) -> AddToParentResult {
+/// Add a file to a parent as a child.
+///
+/// # Arguments
+/// * `id` - The id of the worker.
+/// * `parent` - The parent file.
+/// * `child` - The child file.
+///
+/// # Returns
+/// The result of the operation.
+fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child: &Arc<AnalysisFile>) -> AddToParentResult {
     match parent.lock() {
         Ok(guard) => {
             // exclusive access to parent file
@@ -175,7 +231,7 @@ fn add_to_parent_as_child(parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child:
                             *guard = Some(Arc::downgrade(parent));
                         },
                         Err(err) => {
-                            error!("Failed to lock parent: {}", err);
+                            error!("[{}] Failed to lock parent: {}", id, err);
                             return AddToParentResult::Error;
                         }
                     }
@@ -189,13 +245,13 @@ fn add_to_parent_as_child(parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child:
                                     AddToParentResult::Ok
                                 },
                                 Err(err) => {
-                                    error!("Failed to lock children: {}", err);
+                                    error!("[{}] Failed to lock children: {}", id, err);
                                     AddToParentResult::Error
                                 }
                             }
                         },
                         _ => {
-                            error!("Parent is not a directory");
+                            error!("[{}] Parent is not a directory", id);
                             AddToParentResult::Error
                         }
                     }
@@ -207,12 +263,15 @@ fn add_to_parent_as_child(parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child:
             }
         },
         Err(err) => {
-            error!("Failed to lock file: {}", err);
+            error!("[{}] Failed to lock file: {}", id, err);
             AddToParentResult::Error
         }
     }
 }
 
-pub fn worker_run(_id: usize, job: AnalysisJob, _result_publish: &Sender<AnalysisResult>, _job_publish: &Sender<AnalysisJob>, arg: &mut WorkerArgument) {
-    recursive_process_file(&job.file.path, arg);
+/// The main function for the analysis worker.
+///
+/// # Arguments
+pub fn worker_run(id: usize, job: AnalysisJob, _result_publish: &Sender<AnalysisResult>, _job_publish: &Sender<AnalysisJob>, arg: &mut AnalysisWorkerArgument) {
+    recursive_process_file(id, &job.file.path, arg);
 }

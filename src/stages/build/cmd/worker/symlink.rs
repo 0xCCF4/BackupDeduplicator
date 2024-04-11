@@ -1,19 +1,31 @@
-use crate::data::{File, SaveFileEntryType, SymlinkInformation};
+use crate::stages::build::cmd::worker::BuildJob;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::build::JobResult;
-use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::data::{GeneralHash, Job};
-use crate::utils;
+use crate::stages::build::intermediary_build_data::{BuildFile, BuildSymlinkInformation};
+use crate::hash::GeneralHash;
+use crate::stages::build::cmd::job::JobResult;
+use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
+use crate::stages::build::output::HashTreeFileEntryType;
 
-pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+/// Analyze a symlink.
+/// 
+/// # Arguments
+/// * `path` - The path to the symlink.
+/// * `modified` - The last modified time of the symlink.
+/// * `size` - The size of the symlink (given by fs::metdata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
+pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing symlink {} > {:?}", id, &job.target_path, path);
     
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {
-            if found.file_type == SaveFileEntryType::Symlink && found.modified == modified && found.size == size {
+            if found.file_type == HashTreeFileEntryType::Symlink && found.modified == modified && found.size == size {
                 trace!("Symlink {:?} is already in save file", path);
                 let target_link = fs::read_link(&path);
                 let target_link = match target_link {
@@ -24,7 +36,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
                         return;
                     }
                 };
-                worker_publish_result_or_trigger_parent(id, true, File::Symlink(SymlinkInformation {
+                worker_publish_result_or_trigger_parent(id, true, BuildFile::Symlink(BuildSymlinkInformation {
                     path: job.target_path.clone(),
                     modified,
                     content_hash: found.hash.clone(),
@@ -49,7 +61,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
 
     let mut hash = GeneralHash::from_type(arg.hash_type);
 
-    match utils::hash_path(&target_link, &mut hash) {
+    match hash.hash_path(&target_link) {
         Ok(_) => {},
         Err(err) => {
             error!("Error while hashing symlink target {:?}: {}", target_link, err);
@@ -58,7 +70,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
         }
     }
 
-    let file = File::Symlink(SymlinkInformation {
+    let file = BuildFile::Symlink(BuildSymlinkInformation {
         path: job.target_path.clone(),
         modified,
         content_hash: hash,

@@ -1,20 +1,33 @@
+use crate::stages::build::cmd::worker::GeneralHashType;
+use crate::hash::GeneralHash;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::build::JobResult;
-use crate::build::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::data::{GeneralHash, Job, GeneralHashType, File, FileInformation, SaveFileEntryType};
-use crate::utils;
+use crate::stages::build::intermediary_build_data::{BuildFile, BuildFileInformation};
+use crate::stages::build::cmd::job::{BuildJob, JobResult};
+use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
+use crate::stages::build::output::HashTreeFileEntryType;
 
-pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: Job, result_publish: &Sender<JobResult>, job_publish: &Sender<Job>, arg: &mut WorkerArgument) {
+/// Analyze a file.
+/// 
+/// # Arguments
+/// * `path` - The path to the file.
+/// * `modified` - The last modified time of the file.
+/// * `size` - The size of the file (given by fs::metadata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
+pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
 
     match worker_fetch_savedata(arg, &job.target_path) {
         Some(found) => {
-            if found.file_type == SaveFileEntryType::File && found.modified == modified && found.size == size {
+            if found.file_type == HashTreeFileEntryType::File && found.modified == modified && found.size == size {
                 trace!("File {:?} is already in save file", path);
-                worker_publish_result_or_trigger_parent(id, true, File::File(FileInformation {
+                worker_publish_result_or_trigger_parent(id, true, BuildFile::File(BuildFileInformation {
                     path: job.target_path.clone(),
                     modified,
                     content_hash: found.hash.clone(),
@@ -36,7 +49,7 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
                 // dont hash file
                 content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
             } else {
-                match utils::hash_file(&mut reader, &mut hash) {
+                match hash.hash_file(&mut reader) {
                     Ok(size) => {
                         content_size = size;
                     }
@@ -48,7 +61,7 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
                 }
             }
 
-            let file = File::File(FileInformation {
+            let file = BuildFile::File(BuildFileInformation {
                 path: job.target_path.clone(),
                 modified,
                 content_hash: hash,

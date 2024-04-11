@@ -2,8 +2,16 @@ use std::fs;
 use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
-use crate::data::{SaveFile, SaveFileEntryType};
+use crate::hash::GeneralHashType;
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntryType};
 
+/// Settings for the clean stage.
+/// 
+/// # Fields
+/// * `input` - The input hashtree file to clean.
+/// * `output` - The output hashtree file to write the cleaned hashtree to.
+/// * `root` - The root path of the original working directory. This is used to resolve relative paths.
+/// * `follow_symlinks` - Whether to follow symlinks when checking if files exist.
 pub struct CleanSettings {
     pub input: PathBuf,
     pub output: PathBuf,
@@ -11,6 +19,10 @@ pub struct CleanSettings {
     pub follow_symlinks: bool,
 }
 
+/// Run the clean command.
+/// 
+/// # Arguments
+/// * `clean_settings` - The settings for the clean command.
 pub fn run(
     clean_settings: CleanSettings,
 ) -> Result<()> {
@@ -39,7 +51,7 @@ pub fn run(
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
-    let mut save_file = SaveFile::new(&mut output_buf_writer, &mut input_buf_reader, false, true, true);
+    let mut save_file = HashTreeFile::new(&mut output_buf_writer, &mut input_buf_reader, GeneralHashType::NULL, false, true, true);
     save_file.load_header()?;
 
     // remove duplicates, remove deleted files
@@ -64,13 +76,13 @@ pub fn run(
                 
                 if let Some(metadata) = metadata {
                     return if metadata.is_symlink() {
-                        entry.file_type == SaveFileEntryType::Symlink
+                        entry.file_type == HashTreeFileEntryType::Symlink
                     } else if metadata.is_dir() {
-                        entry.file_type == SaveFileEntryType::Directory
+                        entry.file_type == HashTreeFileEntryType::Directory
                     } else if metadata.is_file() {
-                        entry.file_type == SaveFileEntryType::File
+                        entry.file_type == HashTreeFileEntryType::File
                     } else {
-                        entry.file_type == SaveFileEntryType::Other
+                        entry.file_type == HashTreeFileEntryType::Other
                     }
                 }
                 

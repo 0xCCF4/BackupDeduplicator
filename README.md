@@ -53,7 +53,12 @@ The tool is a command line tool. There are two stages: `build` and `analyze`.
 ### Build
 Exemplary usage to build a hash tree of a directory:
 ```bash
-backup-deduplicator --threads 16 build -w /parent -o /parent/hash.bdd /parent/target
+backup-deduplicator
+  --threads 16
+  build
+  --working-directory /parent
+  --output /parent/hash.bdd
+  /parent/target
 ```
 This will build a hash tree of the directory `/path/to/parent/target` and save it to
 `hash.bdd` in the parent directory. The tool will use 16 threads to split the hash
@@ -62,7 +67,10 @@ calculation work.
 ### Analyze
 Exemplary usage to analyze a hash tree:
 ```bash
-backup-deduplicator analyze -o /parent/analysis.bdd /parent/hash.bdd
+backup-deduplicator
+  analyze
+  --output /parent/analysis.bdd
+  /parent/hash.bdd
 ```
 This will analyze the hash tree in `hash.bdd` and save the analysis result to `analysis.bdd`.
 The analysis file will then contain a list of JSON objects (one per line),
@@ -76,8 +84,18 @@ The tool is written in Rust, and can be installed using `cargo`:
 cargo install backup-deduplicator
 ```
 
+Precompiled binaries are available for download on the release page
+<https://github.com/0xCCF4/BackupDeduplicator/releases>.
+
+## Features Flags
+The tool uses the rust features flags to enable or disable certain features.
+The following flags are available:
+* `hash-sha1`: Use the [sha1](https://crates.io/crates/sha1) module to enable SHA1 hash function
+* `hash-sha2`: Use the [sha2](https://crates.io/crates/sha2) module to enable SHA512, SHA256 hash functions
+* `hash-xxh`: Use the [xxhash-rust](https://crates.io/crates/xxhash-rust) module to enable XXH3 (32/64) hash functions
+
 ## Contribution
-Contributions to PhotoSort are welcome! If you have a feature request,
+Contributions to the project are welcome! If you have a feature request,
 bug report, or want to contribute to the code, please open an
 issue or a pull request.
 
