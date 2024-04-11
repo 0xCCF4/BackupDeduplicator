@@ -7,6 +7,7 @@ use serde::de::Error;
 use const_format::concatcp;
 use crate::stages::build::intermediary_build_data::BuildFile;
 use crate::path::FilePath;
+#[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
 use crate::utils;
 
 
