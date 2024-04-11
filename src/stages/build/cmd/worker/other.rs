@@ -6,6 +6,17 @@ use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::stages::build::output::HashTreeFileEntryType;
 
+/// Analyze a file that is not a symlink/folder/file.
+/// 
+/// # Arguments
+/// * `path` - The path to the file.
+/// * `modified` - The last modified time of the file.
+/// * `size` - The size of the file (given by fs::metadata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
 pub fn worker_run_other(path: PathBuf, modified: u64, size: u64, id: usize, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing other {} > {:?}", id, &job.target_path, path);
 

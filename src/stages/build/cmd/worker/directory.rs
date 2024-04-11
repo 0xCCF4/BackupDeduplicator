@@ -11,6 +11,17 @@ use crate::stages::build::cmd::job::{BuildJob, BuildJobState, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::stages::build::output::HashTreeFileEntryType;
 
+/// Analyze a directory.
+/// 
+/// # Arguments
+/// * `path` - The path to the directory.
+/// * `modified` - The last modified time of the directory.
+/// * `size` - The size of the directory (given by fs::metadata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
 pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
     trace!("[{}] analyzing directory {} > {:?}", id, &job.target_path, path);
 
