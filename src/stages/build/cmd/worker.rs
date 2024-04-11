@@ -1,4 +1,4 @@
-use crate::file::{OtherInformation, StubInformation};
+use crate::stages::build::intermediary_build_data::{BuildFile, BuildOtherInformation, BuildStubInformation};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
@@ -6,7 +6,6 @@ use std::sync::mpsc::Sender;
 use std::time::SystemTime;
 use anyhow::anyhow;
 use log::{error, info, trace, warn};
-use crate::file::File;
 use crate::hash::GeneralHashType;
 use crate::path::FilePath;
 use crate::stages::build::cmd::job::{BuildJob, JobResult, JobResultContent};
@@ -124,8 +123,8 @@ fn worker_publish_result(id: usize, result_publish: &Sender<JobResult>, result: 
 /// 
 /// # Returns
 /// The created [File::Other].
-fn worker_create_error(path: FilePath, modified: u64, size: u64) -> File {
-    File::Other(OtherInformation {
+fn worker_create_error(path: FilePath, modified: u64, size: u64) -> BuildFile {
+    BuildFile::Other(BuildOtherInformation {
         path,
         modified,
         content_size: size,
@@ -160,7 +159,7 @@ fn worker_publish_new_job(id: usize, job_publish: &Sender<BuildJob>, job: BuildJ
 /// * `result_publish` - The channel to publish the result to.
 /// * `job_publish` - The channel to publish new jobs to.
 /// * `arg` - The argument for the worker thread.
-fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: File, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, _arg: &mut WorkerArgument) {
+fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: BuildFile, job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, _arg: &mut WorkerArgument) {
     let parent_job;
 
     let hash;
@@ -179,7 +178,7 @@ fn worker_publish_result_or_trigger_parent(id: usize, cached: bool, result: File
 
     match parent_job.finished_children.lock() {
         Ok(mut finished) => {
-            finished.push(File::Stub(StubInformation {
+            finished.push(BuildFile::Stub(BuildStubInformation {
                 path: job.target_path,
                 content_hash: hash,
             }));

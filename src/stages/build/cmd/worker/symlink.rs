@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::file::{File, SymlinkInformation};
+use crate::stages::build::intermediary_build_data::{BuildFile, BuildSymlinkInformation};
 use crate::hash::GeneralHash;
 use crate::stages::build::cmd::job::JobResult;
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
@@ -36,7 +36,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
                         return;
                     }
                 };
-                worker_publish_result_or_trigger_parent(id, true, File::Symlink(SymlinkInformation {
+                worker_publish_result_or_trigger_parent(id, true, BuildFile::Symlink(BuildSymlinkInformation {
                     path: job.target_path.clone(),
                     modified,
                     content_hash: found.hash.clone(),
@@ -70,7 +70,7 @@ pub fn worker_run_symlink(path: PathBuf, modified: u64, size: u64, id: usize, jo
         }
     }
 
-    let file = File::Symlink(SymlinkInformation {
+    let file = BuildFile::Symlink(BuildSymlinkInformation {
         path: job.target_path.clone(),
         modified,
         content_hash: hash,

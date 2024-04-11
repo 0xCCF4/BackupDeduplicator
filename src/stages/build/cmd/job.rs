@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use serde::Serialize;
-use crate::file::File;
+use crate::stages::build::intermediary_build_data::BuildFile;
 use crate::path::FilePath;
 use crate::pool::{JobTrait, ResultTrait};
 
@@ -36,7 +36,7 @@ pub enum BuildJobState {
 pub struct BuildJob {
     id: usize,
     pub parent: Option<SharedBuildJob>,
-    pub finished_children: Mutex<Vec<File>>,
+    pub finished_children: Mutex<Vec<BuildFile>>,
     pub target_path: FilePath,
     pub state: BuildJobState,
 }
@@ -96,7 +96,7 @@ impl JobTrait for BuildJob {
 #[derive(Debug, Serialize, Clone)]
 pub struct JobResultContent {
     pub already_cached: bool,
-    pub content: File,
+    pub content: BuildFile,
 }
 
 /// A job result.

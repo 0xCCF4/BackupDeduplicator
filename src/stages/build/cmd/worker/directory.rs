@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::file::{DirectoryInformation, File};
+use crate::stages::build::intermediary_build_data::{BuildDirectoryInformation, BuildFile};
 use crate::hash::GeneralHash;
 use crate::stages::build::cmd::job::{BuildJob, BuildJobState, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
@@ -100,7 +100,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                                     let mut children = Vec::new();
                                     children.append(finished.deref_mut());
 
-                                    let file = File::Directory(DirectoryInformation {
+                                    let file = BuildFile::Directory(BuildDirectoryInformation {
                                         path: job.target_path.clone(),
                                         modified,
                                         content_hash: found.hash.clone(),
@@ -141,7 +141,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 return;
             }
 
-            let file = File::Directory(DirectoryInformation {
+            let file = BuildFile::Directory(BuildDirectoryInformation {
                 path: job.target_path.clone(),
                 modified,
                 content_hash: hash,

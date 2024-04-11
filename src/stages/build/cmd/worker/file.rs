@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use log::{error, trace};
-use crate::file::{File, FileInformation};
+use crate::stages::build::intermediary_build_data::{BuildFile, BuildFileInformation};
 use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
 use crate::stages::build::output::HashTreeFileEntryType;
@@ -27,7 +27,7 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
         Some(found) => {
             if found.file_type == HashTreeFileEntryType::File && found.modified == modified && found.size == size {
                 trace!("File {:?} is already in save file", path);
-                worker_publish_result_or_trigger_parent(id, true, File::File(FileInformation {
+                worker_publish_result_or_trigger_parent(id, true, BuildFile::File(BuildFileInformation {
                     path: job.target_path.clone(),
                     modified,
                     content_hash: found.hash.clone(),
@@ -61,7 +61,7 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
                 }
             }
 
-            let file = File::File(FileInformation {
+            let file = BuildFile::File(BuildFileInformation {
                 path: job.target_path.clone(),
                 modified,
                 content_hash: hash,

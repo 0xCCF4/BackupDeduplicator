@@ -8,4 +8,4 @@ pub mod output {
 pub mod cmd;
 mod worker;
 
-pub mod intermediary_filetree;
+pub mod intermediary_analysis_data;

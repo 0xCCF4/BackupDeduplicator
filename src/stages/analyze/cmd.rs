@@ -10,14 +10,14 @@ use anyhow::{anyhow, Result};
 use log::{error, info, trace};
 use crate::hash::{GeneralHash, GeneralHashType};
 use crate::pool::ThreadPool;
-use crate::stages::analyze::intermediary_filetree::AnalysisFile;
+use crate::stages::analyze::intermediary_analysis_data::AnalysisFile;
 use crate::stages::analyze::output::{DupSetEntryRef};
 use crate::stages::analyze::worker::{AnalysisJob, AnalysisResult, worker_run, AnalysisWorkerArgument};
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use crate::utils::NullWriter;
 
 /// The settings for the analysis cmd.
-/// 
+///
 /// # Fields
 /// * `input` - The input file to analyze.
 /// * `output` - The output file to write the results to.
@@ -29,13 +29,13 @@ pub struct AnalysisSettings {
 }
 
 /// Run the analysis cmd.
-/// 
+///
 /// # Arguments
 /// * `analysis_settings` - The settings for the analysis cmd.
-/// 
+///
 /// # Returns
 /// Nothing
-/// 
+///
 /// # Errors
 /// * If the input file cannot be opened.
 /// * If the output file cannot be opened.

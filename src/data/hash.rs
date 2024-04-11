@@ -5,7 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::de::Error;
 use const_format::concatcp;
-use crate::file::File;
+use crate::stages::build::intermediary_build_data::BuildFile;
 use crate::path::FilePath;
 use crate::utils;
 
@@ -536,7 +536,7 @@ impl GeneralHash {
     ///
     /// # Errors
     /// Does not return an error. Might return an error in the future.
-    pub fn hash_directory<'a>(&mut self, children: impl Iterator<Item = &'a File>) -> anyhow::Result<u64> {
+    pub fn hash_directory<'a>(&mut self, children: impl Iterator<Item = &'a BuildFile>) -> anyhow::Result<u64> {
         let mut hasher = self.hasher();
 
         let mut content_size = 0;

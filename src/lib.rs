@@ -16,7 +16,6 @@ pub mod stages {
 mod data {
     pub mod path;
     pub mod hash;
-    pub mod file;
     pub mod fileid;
 }
 

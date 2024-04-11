@@ -5,11 +5,11 @@ use std::sync::mpsc::Sender;
 use log::error;
 use crate::path::FilePath;
 use crate::pool::{JobTrait, ResultTrait};
-use crate::stages::analyze::intermediary_filetree::{AnalysisFile, AnalysisDirectoryInformation, AnalysisFileInformation, AnalysisOtherInformation, AnalysisSymlinkInformation};
+use crate::stages::analyze::intermediary_analysis_data::{AnalysisFile, AnalysisDirectoryInformation, AnalysisFileInformation, AnalysisOtherInformation, AnalysisSymlinkInformation};
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 
 /// The intermediary file for the analysis worker.
-/// 
+///
 /// # Fields
 /// * `saved_file_entry` - A saved file entry from the hash tree file.
 /// * `file` - Analysis result of the file. Processed by a worker.
@@ -21,7 +21,7 @@ pub struct AnalysisIntermediaryFile {
 
 /// The argument for the analysis worker main thread.
 /// Files from the hash tree file are stored in a hash map.
-/// 
+///
 /// # Fields
 /// * `file_by_path` - A hash map of [FilePath] -> [AnalysisIntermediaryFile].
 pub struct AnalysisWorkerArgument {
@@ -29,7 +29,7 @@ pub struct AnalysisWorkerArgument {
 }
 
 /// The job for the analysis worker.
-/// 
+///
 /// # Fields
 /// * `id` - The id of the job.
 /// * `file` - The file to analyze.
@@ -41,10 +41,10 @@ pub struct AnalysisJob {
 
 impl AnalysisJob {
     /// Create a new analysis job.
-    /// 
+    ///
     /// # Arguments
     /// * `file` - The file to analyze.
-    /// 
+    ///
     /// # Returns
     /// The analysis job.
     pub fn new(file: Arc<HashTreeFileEntry>) -> Self {
@@ -57,7 +57,7 @@ impl AnalysisJob {
 
 impl JobTrait for AnalysisJob {
     /// Get the job id.
-    /// 
+    ///
     /// # Returns
     /// The job id.
     fn job_id(&self) -> usize {
@@ -82,11 +82,11 @@ impl ResultTrait for AnalysisResult {}
 
 
 /// Get the parent file of a file. Searches the arg.cache for the parent file.
-/// 
+///
 /// # Arguments
 /// * `file` - The file to get the parent of.
 /// * `arg` - The argument for the worker thread.
-/// 
+///
 /// # Returns
 /// The parent file and the parent path.
 /// If the parent file is not present, return None.
@@ -109,7 +109,7 @@ fn parent_file<'a, 'b>(file: &'b AnalysisIntermediaryFile, arg: &'a AnalysisWork
 
 /// Recursively process a file. Iterates over the file and its parent files until
 /// the parent file is present or the root is reached.
-/// 
+///
 /// # Arguments
 /// * `id` - The id of the worker.
 /// * `path` - The path of the file to process.
@@ -197,7 +197,7 @@ fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgume
 }
 
 /// The result of adding a file to a parent as child, see [add_to_parent_as_child]
-/// 
+///
 /// # Variants
 /// * `Ok` - The operation was successful.
 /// * `ParentDoesNotExist` - The parent does not exist.
@@ -209,12 +209,12 @@ enum AddToParentResult {
 }
 
 /// Add a file to a parent as a child.
-/// 
+///
 /// # Arguments
 /// * `id` - The id of the worker.
 /// * `parent` - The parent file.
 /// * `child` - The child file.
-/// 
+///
 /// # Returns
 /// The result of the operation.
 fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child: &Arc<AnalysisFile>) -> AddToParentResult {
@@ -270,7 +270,7 @@ fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>
 }
 
 /// The main function for the analysis worker.
-/// 
+///
 /// # Arguments
 pub fn worker_run(id: usize, job: AnalysisJob, _result_publish: &Sender<AnalysisResult>, _job_publish: &Sender<AnalysisJob>, arg: &mut AnalysisWorkerArgument) {
     recursive_process_file(id, &job.file.path, arg);
