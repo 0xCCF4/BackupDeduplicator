@@ -128,6 +128,44 @@ impl Write for NullWriter {
     fn flush(&mut self) -> std::io::Result<()> {Ok(())}
 }
 
+/// A reader that does not provide data
+/// 
+/// # Example
+/// ```
+/// use std::io::Read;
+/// 
+/// let mut reader = backup_deduplicator::utils::NullReader::new();
+/// let mut buf = [0; 10];
+/// assert_eq!(reader.read(&mut buf).unwrap(), 0);
+/// ```
+pub struct NullReader {}
+
+impl NullReader {
+    /// Create a new NullReader.
+    /// 
+    /// # Returns
+    /// A new NullReader.
+    pub fn new() -> Self {
+        NullReader {}
+    }
+}
+
+impl std::io::Read for NullReader {
+    /// Does not provide any data.
+    /// 
+    /// # Arguments
+    /// * `buf` - The buffer to read into.
+    /// 
+    /// # Returns
+    /// The number of bytes read. Always 0.
+    /// 
+    /// # Errors
+    /// Never
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+
 /// Utility functions for the main function of `backup-deduplicator`.
 pub mod main {
     use std::env;

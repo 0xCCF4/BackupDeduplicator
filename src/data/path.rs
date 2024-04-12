@@ -4,12 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Result};
 use serde::{Deserialize, Serialize};
 
-/// The type of archive.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
-pub enum ArchiveType {
-    Tar,
-    Zip,
-}
+
 
 /// The target of a path.
 ///

@@ -28,9 +28,15 @@ xxhash-rust = { version = "0.8.10", features = ["xxh32", "xxh64"], optional = tr
 sha1 = {  version = "0.11.0-pre.3", optional = true }
 sha2 = {  version = "0.10.8", optional = true }
 const_format = "0.2.32"
+flate2 = { version = "1.0.28", optional = true }
+xz2 = { version = "0.1.7", optional = true }
+tar = {  version = "0.4.40", optional = true }
 
 [features]
 hash-sha1 = ["dep:sha1"]
 hash-sha2 = ["dep:sha2"]
 hash-xxh = ["dep:xxhash-rust"]
-default = ["hash-sha1", "hash-sha2", "hash-xxh"]
+compress-flate2 = ["dep:flate2"]
+compress-xz = ["dep:xz2"]
+archive-tar = ["dep:tar"]
+default = ["hash-sha1", "hash-sha2", "hash-xxh", "compress-flate2", "compress-xz", "archive-tar"]

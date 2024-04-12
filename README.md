@@ -93,6 +93,9 @@ The following flags are available:
 * `hash-sha1`: Use the [sha1](https://crates.io/crates/sha1) module to enable SHA1 hash function
 * `hash-sha2`: Use the [sha2](https://crates.io/crates/sha2) module to enable SHA512, SHA256 hash functions
 * `hash-xxh`: Use the [xxhash-rust](https://crates.io/crates/xxhash-rust) module to enable XXH3 (32/64) hash functions
+* `compress-flate2`: Use the [flate2](https://crates.io/crates/flate2) module to enable gzip compression
+* `compress-xz`: Use the [xz2](https://crates.io/crates/xz2) module to enable xz compression
+* `archive-tar`: Use the [tar](https://crates.io/crates/tar) module to enable tar archive support
 
 ## Contribution
 Contributions to the project are welcome! If you have a feature request,

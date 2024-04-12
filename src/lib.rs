@@ -17,6 +17,8 @@ mod data {
     pub mod path;
     pub mod hash;
     pub mod fileid;
+    pub mod compression;
+    pub mod archive;
 }
 
 pub use data::*;
