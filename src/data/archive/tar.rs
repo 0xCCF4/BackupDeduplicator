@@ -1,103 +1,140 @@
+use std::cell::RefCell;
 use std::io::Read;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::rc::Rc;
 use log::error;
 use crate::archive::ArchiveEntry;
 
-pub struct TarArchiveIterator<'a, R: Read + 'a + 'static> {
-    input: R, // fully ownership of the input
-    archive: Option<tar::Archive<&'a mut R>>,
-    entries: Option<tar::Entries<'a, &'a mut R>>,
-    current_entry: Option<tar::Entry<'a, &'a mut R>>,
+
+/// An iterator over a tar archive.
+/// 
+/// # Example
+/// ```
+/// use std::fs::File;
+/// use std::io::Read;use backup_deduplicator::archive::tar::TarArchiveIterator;use backup_deduplicator::compression::CompressionType;
+///
+/// let file = std::fs::File::open("tests/res/archive_example.tar.gz").expect("Test resource not found.");
+/// let decompfile = CompressionType::Gz {}.create_decompressor(file);
+/// let archive = TarArchiveIterator::new(decompfile).unwrap();
+/// for mut entry in archive {
+///     println!("{:?}", entry.path);
+/// }
+/// ``` 
+#[allow(dead_code)]
+pub struct TarArchiveIterator<R: Read + 'static> {
+    // Self-referential struct, therefore drop must occur in the order entries -> archive -> input.
+    // DO NOT CHANGE THE ORDER OF THESE FIELDS.
+    entries: Pin<Box<tar::Entries<'static, &'static mut R>>>,
+    archive: Pin<Box<tar::Archive<&'static mut R>>>,
+    input: Pin<Box<R>>,
+
+    // Used to ensure that the previous entry is consumed before the next one is returned.
+    // Since we return a stream to the entry, we need to ensure that the previous stream is consumed before
+    // running destructors on the previous entry.
+    entry_active: Rc<RefCell<bool>>,
 }
 
-impl<'a, R: Read> TarArchiveIterator<'a, R> {
-    pub fn new(input: R) -> anyhow::Result<TarArchiveIterator<'a, R>> {
-        let mut iterator = TarArchiveIterator {
+impl<R: Read> TarArchiveIterator<R> {
+    /// Create a new tar archive iterator.
+    /// 
+    /// # Arguments
+    /// * `input` - The input stream.
+    /// 
+    /// # Returns
+    /// The tar archive iterator.
+    /// 
+    /// # Errors
+    /// If the tar archive cannot be read.
+    pub fn new(input: R) -> anyhow::Result<TarArchiveIterator<R>> {
+        let mut input = Box::pin(input);
+        let input_ref: &'static mut R = unsafe { std::mem::transmute(input.as_mut()) };
+
+        let archive = tar::Archive::new(input_ref);
+        let mut archive = Box::pin(archive);
+        let archive_ref: &'static mut tar::Archive<&'static mut R> = unsafe { std::mem::transmute(archive.as_mut()) };
+
+        let entries = archive_ref.entries()?;
+        let entries = Box::pin(entries);
+        // let mut entries_ref: &'static mut tar::Entries<'static, &'static mut R> = unsafe { std::mem::transmute(&mut entries) };
+        
+        Ok(TarArchiveIterator {
             input,
-            archive: None,
-            entries: None,
-            current_entry: None,
-        };
-        
-        unsafe {
-            let pointer = &mut iterator.input as *mut R;
-            let input = &mut *pointer;
-            let archive = tar::Archive::new(input);
-            iterator.archive = Some(archive);
-        }
-        
-        unsafe {
-            let pointer = &mut iterator.archive as *mut Option<tar::Archive<&'a mut R>>;
-            let archive = &mut *pointer;
-            let entries = archive.as_mut().unwrap().entries()?;
-            iterator.entries = Some(entries);
-        }
-        
-        Ok(iterator)
-    }
-    
-    pub fn next(&'a mut self) -> Option<ArchiveEntry> {
-        let entry = self.entries.as_mut()?.next();
-        match entry {
-            None => { 
-                self.current_entry = None;
-                None
-            },
-            Some(entry) => {
-                match entry {
-                    Ok(entry) => {
-                        let path;
+            archive,
+            entries,
 
-                        match entry.path() {
-                            Ok(p) => {
-                                path = p;
-                            },
-                            Err(_) => {
-                                error!("Failed to get path from tar entry.");
-                                self.current_entry = None;
-                                return None;
-                            }
-                        }
-
-                        let path: PathBuf = path.into();
-                        let size = entry.size();
-
-                        self.current_entry = Some(entry);
-
-                        let archive_entry = ArchiveEntry {
-                            path,
-                            size,
-                        };
-
-                        Some(archive_entry)
-                    },
-                    Err(_) => {
-                        error!("Failed to read entry from tar archive.");
-                        self.current_entry = None;
-                        None
-                    }
-                }
-            }
-        }
-    }
-    
-    pub fn drop(&mut self) {
-        // If current entry is some, drop it.
-        drop(self.current_entry.take());
-        drop(self.entries.take());
-        drop(self.archive.take());
-    }
-    
-    pub fn release(self) -> R {
-        self.input
+            entry_active: Rc::new(RefCell::new(false)),
+        })
     }
 }
 
-impl<'a, R: Read> Read for TarArchiveIterator<'a, R> {
+impl<R: Read> Drop for TarArchiveIterator<R> {
+    fn drop(&mut self) {
+        let prev = self.entry_active.replace_with(|_| false);
+        if prev {
+            panic!("Memory state invalid. Previous entry was not consumed.");
+        }
+    }
+}
+
+struct TarEntryStream<R: Read + 'static> {
+    iterator: Rc<RefCell<bool>>,
+    entry: tar::Entry<'static, &'static mut R>,
+}
+
+impl<R: Read> Read for TarEntryStream<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.current_entry.as_mut() {
-            None => Err(std::io::Error::new(std::io::ErrorKind::Other, "No current entry.")),
-            Some(entry) => entry.read(buf),
+        self.entry.read(buf)
+    }
+}
+
+impl<R: Read> Drop for TarEntryStream<R> {
+    fn drop(&mut self) {
+        let prev = self.iterator.replace_with(|_| false);
+        if !prev {
+            panic!("Illegal state: Previous entry was already consumed.");
+        }
+    }
+}
+
+impl<R: Read> Iterator for TarArchiveIterator<R> {
+    type Item = ArchiveEntry;
+    
+    /// Get the next entry in the tar archive.
+    /// 
+    /// # Returns
+    /// The next entry in the tar archive. If any.
+
+    fn next(&mut self) -> Option<ArchiveEntry> {
+        let next = self.entries.next();
+
+        match next {
+            None => return None,
+            Some(Err(e)) => {
+                error!("Failed to read entry from tar archive: {}", e);
+                return None;
+            },
+            Some(Ok(entry)) => {
+                let path = entry.path().unwrap();
+                let path: PathBuf = path.into();
+                let size = entry.size();
+
+                let archive_entry = ArchiveEntry {
+                    path,
+                    size,
+                    stream: Box::new(TarEntryStream {
+                        iterator: Rc::clone(&self.entry_active),
+                        entry,
+                    }),
+                };
+
+                let prev = self.entry_active.replace_with(|_| true);
+                if prev {
+                    panic!("Previous entry was not consumed.");
+                }
+
+                Some(archive_entry)
+            }
         }
     }
 }

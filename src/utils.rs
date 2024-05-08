@@ -1,4 +1,5 @@
-use std::io::Write;
+use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{anyhow, Result};
@@ -163,6 +164,50 @@ impl std::io::Read for NullReader {
     /// Never
     fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
         Ok(0)
+    }
+}
+
+// Container that calls a function when value is dropped.
+pub struct DestroyContainer<T, F: FnOnce() -> ()> {
+    inner: T,
+    destroy_func: Option<F>,
+}
+
+impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
+    /// Create a new [DestroyContainer]. The destroy function is called when `this`
+    /// instance is dropped.
+    ///
+    /// # Arguments
+    /// * `inner` - The inner value.
+    /// * `destroy_func` - The function to call when `this` instance is dropped.
+    ///
+    /// # Returns
+    /// A new [DestroyContainer].
+    pub fn new(inner: T, destroy_func: F) -> Self {
+        DestroyContainer {
+            inner: inner,
+            destroy_func: Some(destroy_func),
+        }
+    }
+}
+
+impl <T, F: FnOnce() -> ()> Drop for DestroyContainer<T, F> {
+    fn drop(&mut self) {
+        self.destroy_func.take().map(|f| f());
+    }
+}
+
+impl<T, F: FnOnce() -> ()> Deref for DestroyContainer<T, F> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T: Read, F: FnOnce() -> ()> Read for DestroyContainer<T, F> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
     }
 }
 

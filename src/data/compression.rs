@@ -25,7 +25,7 @@ impl CompressionType {
     /// 
     /// # Returns
     /// A decompressed stream.
-    pub fn create_decompressor<R: Read+'static>(&self, input: R) -> Box<dyn Read> {
+    pub fn create_decompressor<R: Read + 'static>(&self, input: R) -> Box<dyn Read> {
         match self {
             #[cfg(feature = "compress-flate2")]
             CompressionType::Gz => Box::new(flate2::read::GzDecoder::new(input)),
