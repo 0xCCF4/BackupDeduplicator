@@ -19,6 +19,7 @@ mod data {
     pub mod fileid;
     pub mod compression;
     pub mod archive;
+    pub mod copy_stream;
 }
 
 pub use data::*;

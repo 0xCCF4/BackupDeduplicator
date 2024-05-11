@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use log::error;
 use crate::archive::ArchiveEntry;
+use anyhow::Result;
 
 
 /// An iterator over a tar archive.
@@ -12,13 +13,15 @@ use crate::archive::ArchiveEntry;
 /// # Example
 /// ```
 /// use std::fs::File;
-/// use std::io::Read;use backup_deduplicator::archive::tar::TarArchiveIterator;use backup_deduplicator::compression::CompressionType;
+/// use std::io::Read;
+/// use backup_deduplicator::archive::tar::TarArchiveIterator;
+/// use backup_deduplicator::compression::CompressionType;
 ///
 /// let file = std::fs::File::open("tests/res/archive_example.tar.gz").expect("Test resource not found.");
 /// let decompfile = CompressionType::Gz {}.create_decompressor(file);
 /// let archive = TarArchiveIterator::new(decompfile).unwrap();
 /// for mut entry in archive {
-///     println!("{:?}", entry.path);
+///     println!("{:?}", entry.unwrap().path);
 /// }
 /// ``` 
 #[allow(dead_code)]
@@ -98,14 +101,14 @@ impl<R: Read> Drop for TarEntryStream<R> {
 }
 
 impl<R: Read> Iterator for TarArchiveIterator<R> {
-    type Item = ArchiveEntry;
+    type Item = Result<ArchiveEntry>;
     
     /// Get the next entry in the tar archive.
     /// 
     /// # Returns
     /// The next entry in the tar archive. If any.
 
-    fn next(&mut self) -> Option<ArchiveEntry> {
+    fn next(&mut self) -> Option<Result<ArchiveEntry>> {
         let next = self.entries.next();
 
         match next {
@@ -115,13 +118,23 @@ impl<R: Read> Iterator for TarArchiveIterator<R> {
                 return None;
             },
             Some(Ok(entry)) => {
-                let path = entry.path().unwrap();
+                let path = entry.path().map_err(
+                    |e| anyhow::anyhow!("Failed to read path from tar archive: {}", e)
+                );
+                let path = match path {
+                    Ok(path) => path,
+                    Err(e) => {
+                        return Some(Err(e));
+                    }
+                };
                 let path: PathBuf = path.into();
                 let size = entry.size();
+                let modified = entry.header().mtime().unwrap_or(0);
 
                 let archive_entry = ArchiveEntry {
                     path,
                     size,
+                    modified,
                     stream: Box::new(TarEntryStream {
                         iterator: Rc::clone(&self.entry_active),
                         entry,
@@ -133,7 +146,7 @@ impl<R: Read> Iterator for TarArchiveIterator<R> {
                     panic!("Previous entry was not consumed.");
                 }
 
-                Some(archive_entry)
+                Some(Ok(archive_entry))
             }
         }
     }

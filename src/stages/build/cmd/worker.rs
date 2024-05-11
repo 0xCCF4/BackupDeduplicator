@@ -19,6 +19,7 @@ mod directory;
 mod file;
 mod other;
 mod symlink;
+mod archive;
 
 /// The argument for the worker main thread.
 /// 

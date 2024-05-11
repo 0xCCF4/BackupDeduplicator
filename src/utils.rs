@@ -185,7 +185,7 @@ impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
     /// A new [DestroyContainer].
     pub fn new(inner: T, destroy_func: F) -> Self {
         DestroyContainer {
-            inner: inner,
+            inner,
             destroy_func: Some(destroy_func),
         }
     }
