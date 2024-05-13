@@ -36,9 +36,9 @@ enum Command {
         /// The directory to analyze
         #[arg()]
         directory: String,
-        /* /// Traverse into archives
+        /// Traverse into archives
         #[arg(short, long)]
-        archives: bool, */
+        archives: bool,
         /// Follow symlinks, if set, the tool will not follow symlinks
         #[arg(long)]
         follow_symlinks: bool,
@@ -128,7 +128,7 @@ fn main() {
     match args.command {
         Command::Build {
             directory,
-            // archives,
+            archives,
             follow_symlinks,
             output,
             // absolute_paths,
@@ -196,7 +196,7 @@ fn main() {
 
             match build::cmd::run(BuildSettings {
                 directory: directory.to_path_buf(),
-                //into_archives: archives,
+                into_archives: archives,
                 follow_symlinks,
                 output: output.clone(),
                 // absolute_paths,

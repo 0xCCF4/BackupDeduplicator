@@ -4,7 +4,7 @@ use std::fs;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::SystemTime;
-use anyhow::anyhow;
+use anyhow::{anyhow};
 use log::{error, info, trace, warn};
 use crate::hash::GeneralHashType;
 use crate::path::FilePath;
@@ -25,10 +25,12 @@ mod archive;
 /// 
 /// # Fields
 /// * `follow_symlinks` - Whether to follow symlinks when traversing the file system.
+/// * `archives` - Whether to traverse into archives.
 /// * `hash_type` - The hash algorithm to use for hashing files.
 /// * `save_file_by_path` - A hash map of [FilePath] -> [HashTreeFileEntry].
 pub struct WorkerArgument {
     pub follow_symlinks: bool,
+    pub archives: bool,
     pub hash_type: GeneralHashType,
     pub save_file_by_path: Arc<HashMap<FilePath, HashTreeFileEntry>>,
 }

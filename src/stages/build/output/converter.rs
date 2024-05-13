@@ -1,4 +1,4 @@
-use crate::stages::build::intermediary_build_data::{BuildDirectoryInformation, BuildFile, BuildFileInformation, BuildOtherInformation, BuildStubInformation, BuildSymlinkInformation};
+use crate::stages::build::intermediary_build_data::{BuildArchiveFileInformation, BuildDirectoryInformation, BuildFile, BuildFileInformation, BuildOtherInformation, BuildStubInformation, BuildSymlinkInformation};
 use crate::hash::GeneralHash;
 use crate::stages::build::output::{HashTreeFileEntryType, HashTreeFileEntry, HashTreeFileEntryRef};
 
@@ -18,7 +18,33 @@ impl From<BuildFileInformation> for HashTreeFileEntry {
             hash: value.content_hash,
             path: value.path,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
+    }
+}
+
+impl From<BuildArchiveFileInformation> for HashTreeFileEntry {
+    /// Convert a [BuildArchiveFileInformation] into a [HashTreeFileEntry].
+    /// 
+    /// # Arguments
+    /// * `value` - The [BuildArchiveFileInformation] to convert.
+    /// 
+    /// # Returns
+    /// The converted [HashTreeFileEntry].
+    fn from(value: BuildArchiveFileInformation) -> Self {
+        let mut result = Self {
+            file_type: HashTreeFileEntryType::File,
+            modified: value.modified,
+            size: value.content_size,
+            hash: value.content_hash,
+            path: value.path,
+            children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(value.children.len()),
+        };
+        for child in value.children {
+            result.archive_children.push(child.get_content_hash().clone());
+        }
+        result
     }
 }
 
@@ -38,6 +64,7 @@ impl From<BuildSymlinkInformation> for HashTreeFileEntry {
             hash: value.content_hash,
             path: value.path,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -58,6 +85,7 @@ impl From<BuildDirectoryInformation> for HashTreeFileEntry {
             hash: value.content_hash,
             path: value.path,
             children: Vec::with_capacity(value.children.len()),
+            archive_children: Vec::with_capacity(0),
         };
         for child in value.children {
             result.children.push(child.get_content_hash().clone());
@@ -82,6 +110,7 @@ impl From<BuildOtherInformation> for HashTreeFileEntry {
             hash: GeneralHash::NULL,
             path: value.path,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -102,6 +131,7 @@ impl From<BuildStubInformation> for HashTreeFileEntry {
             hash: value.content_hash,
             path: value.path,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -122,7 +152,33 @@ impl<'a> From<&'a BuildFileInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.content_size,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
+    }
+}
+
+impl<'a> From<&'a BuildArchiveFileInformation> for HashTreeFileEntryRef<'a> {
+    /// Convert a [BuildArchiveFileInformation] into a [HashTreeFileEntryRef].
+    /// 
+    /// # Arguments
+    /// * `value` - The reference to the [BuildArchiveFileInformation] to convert.
+    /// 
+    /// # Returns
+    /// The converted [HashTreeFileEntryRef].
+    fn from(value: &'a BuildArchiveFileInformation) -> Self {
+        let mut result = Self {
+            file_type: &HashTreeFileEntryType::File,
+            modified: &value.modified,
+            hash: &value.content_hash,
+            path: &value.path,
+            size: &value.content_size,
+            children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(value.children.len()),
+        };
+        for child in &value.children {
+            result.archive_children.push(child.get_content_hash());
+        }
+        result
     }
 }
 
@@ -142,6 +198,7 @@ impl<'a> From<&'a BuildSymlinkInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.content_size,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -162,6 +219,7 @@ impl<'a> From<&'a BuildDirectoryInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.number_of_children,
             children: Vec::with_capacity(value.children.len()),
+            archive_children: Vec::with_capacity(0),
         };
         for child in &value.children {
             result.children.push(child.get_content_hash());
@@ -186,6 +244,7 @@ impl<'a> From<&'a BuildOtherInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.content_size,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -206,6 +265,7 @@ impl<'a> From<&'a BuildStubInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &0,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }
@@ -221,6 +281,7 @@ impl From<BuildFile> for HashTreeFileEntry {
     fn from(value: BuildFile) -> Self {
         match value {
             BuildFile::File(info) => info.into(),
+            BuildFile::ArchiveFile(info) => info.into(),
             BuildFile::Directory(info) => info.into(),
             BuildFile::Symlink(info) => info.into(),
             BuildFile::Other(info) => info.into(),
@@ -240,6 +301,7 @@ impl<'a> From<&'a BuildFile> for HashTreeFileEntryRef<'a> {
     fn from(value: &'a BuildFile) -> Self {
         match value {
             BuildFile::File(info) => info.into(),
+            BuildFile::ArchiveFile(info) => info.into(),
             BuildFile::Directory(info) => info.into(),
             BuildFile::Symlink(info) => info.into(),
             BuildFile::Other(info) => info.into(),
@@ -264,6 +326,7 @@ impl<'a> From<&'a HashTreeFileEntry> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.size,
             children: Vec::with_capacity(0),
+            archive_children: Vec::with_capacity(0),
         }
     }
 }

@@ -14,6 +14,7 @@ use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFile
 /// 
 /// # Fields
 /// * `directory` - The directory to build.
+/// * `into_archives` - Whether to traverse into archives.
 /// * `follow_symlinks` - Whether to follow symlinks when traversing the file system.
 /// * `output` - The output file to write the hash tree to.
 /// * `threads` - The number of threads to use for building the hash tree. None = number of logical CPUs.
@@ -21,7 +22,7 @@ use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFile
 /// * `continue_file` - Whether to continue an existing hash tree file.
 pub struct BuildSettings {
     pub directory: PathBuf,
-    // pub into_archives: bool,
+    pub into_archives: bool,
     pub follow_symlinks: bool,
     pub output: PathBuf,
     // pub absolute_paths: bool,
@@ -103,6 +104,7 @@ pub fn run(
     let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(|| num_cpus::get()));
     for _ in 0..args.capacity() {
         args.push(WorkerArgument {
+            archives: build_settings.into_archives,
             follow_symlinks: build_settings.follow_symlinks,
             hash_type: build_settings.hash_type,
             save_file_by_path: Arc::clone(&file_by_hash),

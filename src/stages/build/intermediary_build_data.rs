@@ -18,6 +18,23 @@ pub struct BuildFileInformation {
     pub content_size: u64,
 }
 
+/// Information about an analyzed archive file.
+/// 
+/// # Fields
+/// * `path` - The path of the archive file.
+/// * `modified` - The last modification time of the archive file.
+/// * `content_hash` - The hash of the archive file content.
+/// * `content_size` - The size of the archive file content.
+/// * `children` - The children of the archive file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildArchiveFileInformation {
+    pub path: FilePath,
+    pub modified: u64,
+    pub content_hash: GeneralHash,
+    pub content_size: u64,
+    pub children: Vec<BuildFile>,
+}
+
 /// Information about an analyzed directory.
 /// 
 /// # Fields
@@ -81,6 +98,7 @@ pub struct BuildStubInformation {
 /// 
 /// # Variants
 /// * `File` - A regular file.
+/// * `ArchiveFile` - An archive file (special variant of file, including subtree).
 /// * `Directory` - A directory.
 /// * `Symlink` - A symlink.
 /// * `Other` - A file that is not a regular file, directory, or symlink, or a file for which permissions are missing.
@@ -88,6 +106,7 @@ pub struct BuildStubInformation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuildFile {
     File(BuildFileInformation),
+    ArchiveFile(BuildArchiveFileInformation),
     Directory(BuildDirectoryInformation),
     Symlink(BuildSymlinkInformation),
     Other(BuildOtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
@@ -104,6 +123,7 @@ impl BuildFile {
     pub fn get_content_hash(&self) -> &GeneralHash {
         match self {
             BuildFile::File(info) => &info.content_hash,
+            BuildFile::ArchiveFile(info) => &info.content_hash,
             BuildFile::Directory(info) => &info.content_hash,
             BuildFile::Symlink(info) => &info.content_hash,
             BuildFile::Other(_) => &GeneralHash::NULL,
@@ -118,6 +138,7 @@ impl BuildFile {
     pub fn get_path(&self) -> &FilePath {
         match self {
             BuildFile::File(info) => &info.path,
+            BuildFile::ArchiveFile(info) => &info.path,
             BuildFile::Directory(info) => &info.path,
             BuildFile::Symlink(info) => &info.path,
             BuildFile::Other(info) => &info.path,
@@ -125,7 +146,7 @@ impl BuildFile {
         }
     }
 
-    /// Returns if this is a directory
+    /// Returns true if this is a directory
     /// 
     /// # Returns
     /// True if this is a directory, false otherwise.
@@ -136,7 +157,7 @@ impl BuildFile {
         }
     }
 
-    /// Returns if this is a symlink
+    /// Returns true if this is a symlink
     /// 
     /// # Returns
     /// True if this is a symlink, false otherwise.
@@ -147,18 +168,30 @@ impl BuildFile {
         }
     }
 
-    /// Returns if this is a file
+    /// Returns true if this is a file
     /// 
     /// # Returns
     /// True if this is a file, false otherwise.
     pub fn is_file(&self) -> bool {
         match self {
             BuildFile::File(_) => true,
+            BuildFile::ArchiveFile(_) => true,
+            _ => false,
+        }
+    }
+    
+    /// Returns true if this is an archive file
+    /// 
+    /// # Returns
+    /// True if this is an archive file, false otherwise.
+    pub fn is_archive(&self) -> bool {
+        match self {
+            BuildFile::ArchiveFile(_) => true,
             _ => false,
         }
     }
 
-    /// Returns if this is an "other" file
+    /// Returns true if this is an "other" file
     /// 
     /// # Returns
     /// True if this is an "other" file, false otherwise.
@@ -169,7 +202,7 @@ impl BuildFile {
         }
     }
     
-    /// Returns if this is a stub file
+    /// Returns true if this is a stub file
     /// 
     /// # Returns
     /// True if this is a stub file, false otherwise.

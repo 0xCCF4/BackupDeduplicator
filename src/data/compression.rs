@@ -1,5 +1,5 @@
 use std::io::Read;
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use serde::{Deserialize, Serialize};
 use crate::utils;
 
@@ -53,6 +53,10 @@ impl CompressionType {
         }
     }
     
+    /// Get the maximum amount of bytes to peek from the stream to determine the compression type.
+    /// 
+    /// # Returns
+    /// The maximum amount of bytes to peek needed to determine the compression type.
     pub const fn max_stream_peek_count() -> usize {
         const MAX_BYTES_FLATE: usize = match cfg!(feature = "compress-flate2") {
             true => 2,
@@ -112,10 +116,14 @@ impl CompressionType {
         let mut buffer = [0; MAX_BYTES];
         
         let mut stream = stream.take(MAX_BYTES as u64);
-        let num_read = stream.read(&mut buffer)?;
-        
-        if num_read != MAX_BYTES {
-            return Err(anyhow!("Could not read enough bytes to determine compression type"));
+
+        let mut num_read_sum: usize = 0;
+        while stream.limit() > 0 {
+            let num_read = stream.read(&mut buffer[num_read_sum..])?;
+            num_read_sum += num_read;
+            if num_read <= 0 {
+                break;
+            }
         }
         
         #[cfg(feature = "compress-flate2")]
