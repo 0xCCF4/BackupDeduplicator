@@ -211,6 +211,18 @@ impl<T: Read, F: FnOnce() -> ()> Read for DestroyContainer<T, F> {
     }
 }
 
+/// Get the maximum of two values.
+/// 
+/// # Arguments
+/// * `a` - The first value.
+/// * `b` - The second value.
+/// 
+/// # Returns
+/// The maximum of `a` and `b`.
+pub(crate) const fn max(a: usize, b: usize) -> usize {
+    [a, b][(a < b) as usize]
+}
+
 /// Utility functions for the main function of `backup-deduplicator`.
 pub mod main {
     use std::env;

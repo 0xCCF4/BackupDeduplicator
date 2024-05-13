@@ -18,7 +18,7 @@ use anyhow::Result;
 /// use backup_deduplicator::compression::CompressionType;
 ///
 /// let file = std::fs::File::open("tests/res/archive_example.tar.gz").expect("Test resource not found.");
-/// let decompfile = CompressionType::Gz {}.create_decompressor(file);
+/// let decompfile = CompressionType::Gz {}.open(file);
 /// let archive = TarArchiveIterator::new(decompfile).unwrap();
 /// for mut entry in archive {
 ///     println!("{:?}", entry.unwrap().path);
