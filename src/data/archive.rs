@@ -58,6 +58,18 @@ impl ArchiveType {
                 buffer[257+7] == 0x30 {
                 return Ok(Some(ArchiveType::Tar));
             }
+
+            if num_read >= 257 + 8 &&
+                buffer[257+0] == 0x75 &&
+                buffer[257+1] == 0x73 &&
+                buffer[257+2] == 0x74 &&
+                buffer[257+3] == 0x61 &&
+                buffer[257+4] == 0x72 &&
+                buffer[257+5] == 0x20 &&
+                buffer[257+6] == 0x20 &&
+                buffer[257+7] == 0x00 {
+                return Ok(Some(ArchiveType::Tar));
+            }
             
             if num_read >= 8 &&
                 buffer[0] == 0x75 &&
