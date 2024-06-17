@@ -69,7 +69,7 @@ pub struct HashTreeFileEntryV1 {
     pub hash: GeneralHash,
     pub path: FilePath,
     pub children: Vec<GeneralHash>,
-    pub archive_children: Vec<GeneralHash>,
+    pub archive_children: Vec<HashTreeFileEntryV1>,
 }
 
 /// HashTreeFile entry reference. Describes an analyzed file.
@@ -94,7 +94,7 @@ pub struct HashTreeFileEntryV1Ref<'a> {
     pub hash: &'a GeneralHash,
     pub path: &'a FilePath,
     pub children: Vec<&'a GeneralHash>,
-    pub archive_children: Vec<&'a GeneralHash>,
+    pub archive_children: Vec<HashTreeFileEntryV1>,
 }
 
 /// Interface to access and manage a hash tree file.

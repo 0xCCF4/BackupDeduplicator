@@ -1,8 +1,13 @@
+use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io::Read;
+use std::ops::DerefMut;
 use std::path::PathBuf;
+use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 use anyhow::{Result};
+use crate::compression::CompressionType;
+use crate::copy_stream::BufferCopyStreamReader;
 use crate::utils;
 
 /// The type of archive.
@@ -23,10 +28,10 @@ impl ArchiveType {
     /// 
     /// # Errors
     /// If the archive could not be opened.
-    pub fn open<R: Read + 'static>(&self, stream: R) -> Result<Box<dyn Iterator<Item=Result<ArchiveEntry>>>> {
+    pub fn open<'a, 'b: 'a, R: Read + 'b>(&self, stream: R) -> Result<Box<dyn ArchiveIterator<'b> + 'a>> {
         match self {
             #[cfg(feature = "archive-tar")]
-            ArchiveType::Tar => Ok(Box::new(tar::TarArchiveIterator::new(stream)?) as Box<dyn Iterator<Item = Result<ArchiveEntry, anyhow::Error>>>),
+            ArchiveType::Tar => Ok(Box::new(tar::TarArchiveIterator::new(stream)?) as Box<dyn ArchiveIterator + 'a>),
         }
     }
     
@@ -139,10 +144,28 @@ pub struct ArchiveEntry {
     pub path: PathBuf,
     pub size: u64,
     pub modified: u64,
-    pub stream: Box<dyn Read>,
+    stream: Box<dyn Read>,
 }
 
-impl Debug for ArchiveEntry {
+impl Read for ArchiveEntry {
+    /// Read from the archive entry.
+    /// 
+    /// # Arguments
+    /// * `buf` - The buffer to read into.
+    /// 
+    /// # Returns
+    /// The number of bytes read.
+    /// 
+    /// # Errors
+    /// If the entry could not be read.
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Borrow_mut should never panic, since there exists only one ArchiveEntry with a reference
+        // to the stream at a time.
+        self.stream.read(buf)
+    }
+}
+
+impl<'a> Debug for ArchiveEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "ArchiveEntry {{ path: {:?}, size: {}, modified: {} }}", self.path, self.size, self.modified)
     }
@@ -150,3 +173,24 @@ impl Debug for ArchiveEntry {
 
 #[cfg(feature = "archive-tar")]
 pub mod tar;
+
+impl<R: Read> BufferCopyStreamReader<R> {
+    /// Create a new buffer copy stream reader with the capacity to determine the compression type.
+    ///
+    /// # Arguments
+    /// * `stream` - The stream to read from.
+    ///
+    /// # Returns
+    /// The buffer copy stream reader.
+    ///
+    /// # See also
+    /// [BufferCopyStreamReader]
+    pub fn with_capacity_archive_peak(stream: R) -> BufferCopyStreamReader<R> {
+        BufferCopyStreamReader::with_capacity(stream, ArchiveType::max_stream_peek_count())
+    }
+}
+
+trait ArchiveIterator<'a> {
+    fn next(&mut self) -> Option<Result<()>>;
+    fn current_entry(&mut self) -> Option<&mut ArchiveEntry>;
+}

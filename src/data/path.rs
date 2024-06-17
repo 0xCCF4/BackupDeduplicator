@@ -1,31 +1,17 @@
 use std::ffi::OsString;
 use std::fmt::Formatter;
-use std::path::PathBuf;
+use std::path::{PathBuf};
 use anyhow::{Result};
 use serde::{Deserialize, Serialize};
 
-
-
-/// The target of a path.
-///
-/// # Fields
-/// * `File` - The path points to a file.
-/// * `Archive` - The path points to an archive. That is further traversed.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum PathTarget {
-    File,
-    // Archive(ArchiveType),
-}
 
 /// A path component. A path points to a file or an archive.
 ///
 /// # Fields
 /// * `path` - The path.
-/// * `target` - The target of the path.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PathComponent {
     pub path: PathBuf,
-    pub target: PathTarget,
 }
 
 /// A file path. A file path specifies a target file. It may consist of multiple path components.
@@ -39,11 +25,11 @@ pub struct PathComponent {
 /// ```
 ///
 /// The file path to `file_in_archive.txt` would consist of the following path components:
-/// - `stuff/more_stuff/archive.tar.gz` (target: Archive)
-/// - `file_in_archive.txt` (target: File)
+/// - `stuff/more_stuff/archive.tar.gz`
+/// - `file_in_archive.txt`
 ///
 /// The file path to `archive.tar.gz` would consist of the following path components:
-/// - `stuff/more_stuff/archive.tar.gz` (target: File)
+/// - `stuff/more_stuff/archive.tar.gz`
 ///
 /// # Fields
 /// * `path` - The path components.
@@ -82,25 +68,28 @@ impl FilePath {
     ///
     /// # Returns
     /// The file path.
-    pub fn from_realpath(path: PathBuf) -> Self {
+    pub fn from_realpath<P: Into<PathBuf>>(path: P) -> Self {
         FilePath {
             path: vec![PathComponent {
-                path,
-                target: PathTarget::File
+                path: path.into(),
             }]
         }
     }
     
-    pub fn join_realpath(&mut self, _path: PathBuf) {
-        todo!("implement")
-    }
-    
-    pub fn extract_parent(&self, _temp_directory: &PathBuf) {
-        todo!("implement")
-    }
-    
-    pub fn delete_parent(&self, _temp_directory: &PathBuf) {
-        todo!("implement")
+    /// Creates a new subpath from a file path. By starting a nested file path.
+    /// 
+    /// # Returns
+    /// The new file path.
+    pub fn new_archive(&self) -> FilePath {
+        let mut result = FilePath {
+            path: self.path.clone()
+        };
+        
+        result.path.push(PathComponent {
+            path: PathBuf::from(String::from("")),
+        });
+        
+        result
     }
 
     /// Resolves the file path to a single file.
@@ -109,14 +98,12 @@ impl FilePath {
     /// The resolved file path.
     ///
     /// # Errors
-    /// Never
+    /// When the file path has multiple components.
     pub fn resolve_file(&self) -> Result<PathBuf> {
         if self.path.len() == 1 {
-            match self.path[0].target {
-                PathTarget::File => Ok(self.path[0].path.clone()),
-            }
+            Ok(self.path[0].path.clone())
         } else {
-            todo!("implement")
+            Err(anyhow::anyhow!("Cannot resolve file path with multiple components"))
         }
     }
 
@@ -164,7 +151,6 @@ impl FilePath {
             None => {
                 result.path.push(PathComponent {
                     path: component,
-                    target: PathTarget::File
                 });
             }
         }

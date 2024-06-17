@@ -1,5 +1,6 @@
 use std::fmt;
 use std::fmt::Display;
+use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize, Serializer};
@@ -640,3 +641,69 @@ mod sha2;
 mod xxh;
 /// `GeneralHasher` implementation for the NULL hash function
 mod null;
+
+
+/// `HashingStream` is a wrapper around a `std::io::Read` that computes
+/// a hash value of the data that is read while proxying the data.
+/// 
+/// # Examples
+/// ```
+/// # use std::io::Read;
+/// # use backup_deduplicator::hash::{GeneralHashType, HashingStream};
+/// 
+/// let data = b"Hello, world!";
+/// let mut stream = HashingStream::new(data.as_ref(), GeneralHashType::SHA256);
+/// let mut buffer = [0; 5];
+/// let bytes_read = stream.read(&mut buffer).unwrap();
+/// 
+/// assert_eq!(bytes_read, 5);
+/// assert_eq!(stream, vec!['H', 'e', 'l', 'l', 'o']);
+/// assert_eq!(stream.hash().to_string(), "SHA256:xx");
+/// ```
+pub struct HashingStream<R: Read> {
+    stream: R,
+    hash: Box<dyn GeneralHasher>,
+    bytes_processed: u64,
+}
+
+impl<R: Read> HashingStream<R> {
+    /// Creates a new instance of a `HashingStream`.
+    /// 
+    /// # Arguments
+    /// * `stream` - The stream to wrap.
+    /// * `hash` - The type of the hash function to use.
+    /// 
+    /// # Returns
+    /// A new instance of a `HashingStream`.
+    pub fn new(stream: R, hash: GeneralHashType) -> Self {
+        HashingStream {
+            stream,
+            hash: hash.hasher(),
+            bytes_processed: 0,
+        }
+    }
+    
+    /// Returns the number of bytes that were read.
+    /// 
+    /// # Returns
+    /// The number of bytes that were read.
+    pub fn bytes_processed(&self) -> u64 {
+        self.bytes_processed
+    }
+    
+    /// Consumes this instance of a `HashingStream` and returns the hash value.
+    /// 
+    /// # Returns
+    /// The hash value of the data that was read.
+    pub fn hash(self) -> GeneralHash {
+        self.hash.finalize()
+    }
+}
+
+impl<R: Read> Read for HashingStream<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.stream.read(buf)?;
+        self.hash.update(&buf[..bytes_read]);
+        Ok(bytes_read)
+    }
+}

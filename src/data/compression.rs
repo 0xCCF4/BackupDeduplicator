@@ -1,6 +1,7 @@
 use std::io::Read;
 use anyhow::{Result};
 use serde::{Deserialize, Serialize};
+use crate::copy_stream::BufferCopyStreamReader;
 use crate::utils;
 
 /// Compression type
@@ -26,7 +27,7 @@ impl CompressionType {
     /// 
     /// # Returns
     /// A decompressed stream.
-    pub fn open<R: Read + 'static>(&self, input: R) -> Box<dyn Read> {
+    pub fn open<'a, R: Read + 'a>(&self, input: R) -> Box<dyn Read + 'a> {
         match self {
             #[cfg(feature = "compress-flate2")]
             CompressionType::Gz => Box::new(flate2::read::GzDecoder::new(input)),
@@ -137,5 +138,21 @@ impl CompressionType {
         }
         
         Ok(CompressionType::Null)
+    }
+}
+
+impl<R: Read> BufferCopyStreamReader<R> {
+    /// Create a new buffer copy stream reader with the capacity to determine the compression type.
+    /// 
+    /// # Arguments
+    /// * `stream` - The stream to read from.
+    /// 
+    /// # Returns
+    /// The buffer copy stream reader.
+    /// 
+    /// # See also
+    /// [BufferCopyStreamReader]
+    pub fn with_capacity_compression_peak(stream: R) -> BufferCopyStreamReader<R> {
+        BufferCopyStreamReader::with_capacity(stream, CompressionType::max_stream_peek_count())
     }
 }

@@ -1,15 +1,15 @@
 use crate::stages::build::cmd::worker::{GeneralHashType};
-use crate::hash::GeneralHash;
+use crate::hash::{HashingStream};
 use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
-use anyhow::anyhow;
+use anyhow::{anyhow};
 use log::{error, trace};
 use crate::archive::ArchiveType;
 use crate::compression::CompressionType;
-use crate::copy_stream::BufferCopyStreamReader;
+use crate::copy_stream::{BufferCopyStreamReader};
 use crate::stages::build::intermediary_build_data::{BuildArchiveFileInformation, BuildFile, BuildFileInformation};
 use crate::stages::build::cmd::job::{BuildJob, JobResult};
 use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
@@ -46,82 +46,105 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
         None => {}
     }
 
-    let archive_contents = match File::open(&path) {
+    let mut hasher;
+    let stream = match File::open(&path) {
         Err(err) => {
             error!("Error while opening file {:?}: {}", path, err);
             worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
             return;
         },
         Ok(stream) => {
-            let archive = match arg.archives {
-                true => is_archive(stream),
-                false => Ok(None),
-            };
-            match archive {
-                Err(err) => {
-                    error!("Error while probing file for archive: {}", err);
-                    None
-                },
-                Ok(None) => {
-                    None
-                },
-                Ok(Some((archive_type, stream))) => {
-                    Some(worker_run_archive(stream, archive_type, modified, size, id, arg))
-                }
-            }
+            hasher = HashingStream::new(stream, arg.hash_type);
+            &mut hasher
         }
     };
-    
-    match fs::File::open(&path) {
-        Ok(file) => {
-            let mut reader = std::io::BufReader::new(file);
-            let mut hash = GeneralHash::from_type(arg.hash_type);
-            let content_size;
 
-            if arg.hash_type == GeneralHashType::NULL {
-                // dont hash file
-                content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
-            } else {
-                match hash.hash_file(&mut reader) {
-                    Ok(size) => {
-                        content_size = size;
-                    }
-                    Err(err) => {
-                        error!("Error while hashing file {:?}: {}", path, err);
-                        worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
-                        return;
-                    }
-                }
-            }
+    let (archive, mut stream) = match arg.archives {
+        true => {
+            let stream = BufferCopyStreamReader::with_capacity_compression_peak(&mut hasher);
+            let result = is_archive(stream.child());
 
-            let file = match archive_contents {
-                None => {
-                    BuildFile::File(BuildFileInformation {
-                        path: job.target_path.clone(),
-                        modified,
-                        content_hash: hash,
-                        content_size,
-                    })
+            let stream = match stream.try_into_inner() {
+                Ok(stream) => {
+                    stream
                 },
-                Some(archive_result) => {
-                    BuildFile::ArchiveFile(BuildArchiveFileInformation {
-                        path: job.target_path.clone(),
-                        modified,
-                        content_hash: hash,
-                        content_size,
-                        children: archive_result,
-                    })
+                Err(err) => {
+                    error!("[{}] Error while peeking into file {:?}: {}", id, path, err);
+                    worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
+                    return;
                 }
             };
-            worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
-            return;
-        }
+
+            (result, stream)
+        },
+        false => (Ok(None), BufferCopyStreamReader::with_no_capacity(&mut hasher).try_into_inner().unwrap())
+    };
+
+    let archive_contents = {
+        match archive {
+            Err(err) => {
+                Err(anyhow!("Error while probing file for archive: {}", err))
+            },
+            Ok(None) => {
+                Ok(None)
+            },
+            Ok(Some((compression_type, archive_type))) => {
+                let stream = compression_type.open(&mut stream);
+                worker_run_archive(stream, &path, archive_type, id, arg).map(|result| Some(result))
+            }
+        }    
+    };
+    
+    let archive_contents = match archive_contents {
         Err(err) => {
-            error!("Error while opening file {:?}: {}", path, err);
+            error!("[{}] Error while probing file for archive: {}", id, err);
             worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
             return;
         }
+        Ok(content) => content
+    };
+    
+    let content_size;
+    
+    // finalize hashing
+    if arg.hash_type != GeneralHashType::NULL {
+        match std::io::copy(&mut stream, &mut std::io::sink()) {
+            Ok(_) => {},
+            Err(err) => {
+                error!("Error while hashing file {:?}: {}", path, err);
+                worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
+                return;
+            }
+        }
+        drop(stream);
+        content_size = hasher.bytes_processed();
+    } else {
+        content_size = fs::metadata(&path).map(|metadata| metadata.len()).unwrap_or(0);
     }
+    
+    let hash = hasher.hash();
+
+    let file = match archive_contents {
+        None => {
+            BuildFile::File(BuildFileInformation {
+                path: job.target_path.clone(),
+                modified,
+                content_hash: hash,
+                content_size,
+            })
+        },
+        Some(archive_result) => {
+            BuildFile::ArchiveFile(BuildArchiveFileInformation {
+                path: job.target_path.clone(),
+                modified,
+                content_hash: hash,
+                content_size,
+                children: archive_result,
+            })
+        }
+    };
+    worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
+    return;
 }
 
 /// Check if the file is an archive (potentially compressed).
@@ -134,14 +157,14 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
 ///
 /// # Error
 /// If the file could not be opened.
-fn is_archive<R: Read + 'static>(stream: R) -> anyhow::Result<Option<(ArchiveType, Box<dyn Read>)>> {
-    let stream = BufferCopyStreamReader::with_capacity(stream, CompressionType::max_stream_peek_count());
+pub fn is_archive<R: Read>(stream: R) -> anyhow::Result<Option<(CompressionType, ArchiveType)>> {
+    let stream = BufferCopyStreamReader::with_capacity_compression_peak(stream);
     let compression_type = CompressionType::from_stream(stream.child()).map_err(|e| anyhow!("Unable to open compressed stream: {}", e))?;
 
     let stream = stream.try_into_inner().map_err(|e| anyhow!("Unable to open compressed stream: {}", e))?;
     let stream = compression_type.open(stream);
 
-    let stream = BufferCopyStreamReader::with_capacity(stream, ArchiveType::max_stream_peek_count());
+    let stream = BufferCopyStreamReader::with_capacity_archive_peak(stream);
     let archive_type = ArchiveType::from_stream(stream.child())
         .map_err(|e| anyhow!("Unable to determine archive stream type: {}", e))?;
 
@@ -149,7 +172,7 @@ fn is_archive<R: Read + 'static>(stream: R) -> anyhow::Result<Option<(ArchiveTyp
         Some(archive_type) => {
             let stream = stream.try_into_inner().map_err(|e| anyhow!("Unable to open archive stream: {}", e))?;
 
-            Ok(Some((archive_type, Box::new(stream))))
+            Ok(Some((compression_type, archive_type)))
         },
         None => {
             Ok(None)

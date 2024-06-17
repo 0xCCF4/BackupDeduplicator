@@ -76,6 +76,17 @@ impl<R: Read> BufferCopyStreamReader<R> {
             buffer: Rc::new(RefCell::new(Vec::with_capacity(capacity))),
         }
     }
+    
+    /// Create a new [BufferCopyStreamReader] instance with the given reader and no initial buffer.
+    /// 
+    /// # Arguments
+    /// * `reader` - The reader to wrap.
+    /// 
+    /// # Returns
+    /// A new [BufferCopyStreamReader] instance.
+    pub fn with_no_capacity(reader: R) -> Self {
+        Self::with_capacity(reader, 0)
+    }
 
     /// Try to get the original reader back from the [BufferCopyStreamReader].
     /// The resulting reader will first provide the buffered bytes before continue

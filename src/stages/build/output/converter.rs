@@ -42,7 +42,7 @@ impl From<BuildArchiveFileInformation> for HashTreeFileEntry {
             archive_children: Vec::with_capacity(value.children.len()),
         };
         for child in value.children {
-            result.archive_children.push(child.get_content_hash().clone());
+            result.archive_children.push(child.into());
         }
         result
     }
@@ -176,7 +176,7 @@ impl<'a> From<&'a BuildArchiveFileInformation> for HashTreeFileEntryRef<'a> {
             archive_children: Vec::with_capacity(value.children.len()),
         };
         for child in &value.children {
-            result.archive_children.push(child.get_content_hash());
+            result.archive_children.push(child.clone().into());
         }
         result
     }
