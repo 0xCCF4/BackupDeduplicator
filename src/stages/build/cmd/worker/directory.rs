@@ -117,37 +117,32 @@ pub fn worker_run_directory(
                     error = false;
 
                     // query cache
-                    match worker_fetch_savedata(arg, &job.target_path) {
-                        Some(found) => {
-                            if found.file_type == HashTreeFileEntryType::Directory
-                                && found.modified == modified
-                                && found.size == finished.len() as u64
-                            {
-                                if found.children.len() == finished.len()
-                                    && found
-                                        .children
-                                        .iter()
-                                        .zip(finished.iter().map(|e| e.get_content_hash()))
-                                        .all(|(a, b)| a == b)
-                                {
-                                    trace!("Directory {:?} is already in save file", path);
+                    if let Some(found) = worker_fetch_savedata(arg, &job.target_path) {
+                        if found.file_type == HashTreeFileEntryType::Directory
+                            && found.modified == modified
+                            && found.size == finished.len() as u64
+                            && found.children.len() == finished.len()
+                            && found
+                                .children
+                                .iter()
+                                .zip(finished.iter().map(|e| e.get_content_hash()))
+                                .all(|(a, b)| a == b)
+                        {
+                            trace!("Directory {:?} is already in save file", path);
 
-                                    let mut children = Vec::new();
-                                    children.append(finished.deref_mut());
+                            let mut children = Vec::new();
+                            children.append(finished.deref_mut());
 
-                                    let file = BuildFile::Directory(BuildDirectoryInformation {
-                                        path: job.target_path.clone(),
-                                        modified,
-                                        content_hash: found.hash.clone(),
-                                        number_of_children: children.len() as u64,
-                                        children,
-                                    });
+                            let file = BuildFile::Directory(BuildDirectoryInformation {
+                                path: job.target_path.clone(),
+                                modified,
+                                content_hash: found.hash.clone(),
+                                number_of_children: children.len() as u64,
+                                children,
+                            });
 
-                                    cached_entry = Some(file);
-                                }
-                            }
+                            cached_entry = Some(file);
                         }
-                        None => {}
                     }
 
                     if cached_entry.is_none() {

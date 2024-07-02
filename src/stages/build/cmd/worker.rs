@@ -112,17 +112,15 @@ pub fn worker_run(
             Ok(0)
         });
 
-    let modified;
-
-    let size = metadata.len();
-
-    match modified_result {
-        Ok(time) => modified = time,
+    let modified = match modified_result {
+        Ok(time) => time,
         Err(err) => {
             error!("Error while processing file {:?}: {}", path, err);
-            modified = 0;
+            0
         }
-    }
+    };
+
+    let size = metadata.len();
 
     if metadata.is_symlink() {
         worker_run_symlink(
@@ -306,9 +304,9 @@ fn worker_publish_result_or_trigger_parent(
 ///
 /// # Returns
 /// The saved data for the file if it exists.
-fn worker_fetch_savedata<'a, 'b>(
+fn worker_fetch_savedata<'a>(
     args: &'a WorkerArgument,
-    path: &'b FilePath,
+    path: &FilePath,
 ) -> Option<&'a HashTreeFileEntry> {
     args.save_file_by_path.get(path)
 }

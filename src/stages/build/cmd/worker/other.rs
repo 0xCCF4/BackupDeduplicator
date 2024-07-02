@@ -31,30 +31,27 @@ pub fn worker_run_other(
 ) {
     trace!("[{}] analyzing other {} > {:?}", id, &job.target_path, path);
 
-    match worker_fetch_savedata(arg, &job.target_path) {
-        Some(found) => {
-            if found.file_type == HashTreeFileEntryType::Other
-                && found.modified == modified
-                && found.size == size
-            {
-                trace!("Other {:?} is already in save file", path);
-                worker_publish_result_or_trigger_parent(
-                    id,
-                    true,
-                    BuildFile::Other(BuildOtherInformation {
-                        path: job.target_path.clone(),
-                        content_size: size,
-                        modified,
-                    }),
-                    job,
-                    result_publish,
-                    job_publish,
-                    arg,
-                );
-                return;
-            }
+    if let Some(found) = worker_fetch_savedata(arg, &job.target_path) {
+        if found.file_type == HashTreeFileEntryType::Other
+            && found.modified == modified
+            && found.size == size
+        {
+            trace!("Other {:?} is already in save file", path);
+            worker_publish_result_or_trigger_parent(
+                id,
+                true,
+                BuildFile::Other(BuildOtherInformation {
+                    path: job.target_path.clone(),
+                    content_size: size,
+                    modified,
+                }),
+                job,
+                result_publish,
+                job_publish,
+                arg,
+            );
+            return;
         }
-        None => {}
     }
 
     let file = BuildFile::Other(BuildOtherInformation {

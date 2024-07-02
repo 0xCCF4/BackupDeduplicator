@@ -125,7 +125,7 @@ impl CompressionType {
         while stream.limit() > 0 {
             let num_read = stream.read(&mut buffer[num_read_sum..])?;
             num_read_sum += num_read;
-            if num_read <= 0 {
+            if num_read == 0 {
                 break;
             }
         }

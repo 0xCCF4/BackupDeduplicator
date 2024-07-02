@@ -116,22 +116,22 @@ impl GeneralHashType {
     /// println!("Supported algorithms: {}", supported);
     /// ```
     pub const fn supported_algorithms() -> &'static str {
-        const SHA2: &'static str = if cfg!(feature = "hash-sha2") {
+        const SHA2: &str = if cfg!(feature = "hash-sha2") {
             "SHA512, SHA256, "
         } else {
             ""
         };
-        const SHA1: &'static str = if cfg!(feature = "hash-sha1") {
+        const SHA1: &str = if cfg!(feature = "hash-sha1") {
             "SHA1, "
         } else {
             ""
         };
-        const XXH: &'static str = if cfg!(feature = "hash-xxh") {
+        const XXH: &str = if cfg!(feature = "hash-xxh") {
             "XXH64, XXH32, "
         } else {
             ""
         };
-        const NULL: &'static str = "NULL";
+        const NULL: &str = "NULL";
 
         concatcp!(SHA2, SHA1, XXH, NULL)
     }
@@ -345,14 +345,14 @@ impl FromStr for GeneralHash {
     /// * If the hash data is not valid (wrong length or non-hex string).
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
         let mut iter = hex.split(':');
-        let hash_type = GeneralHashType::from_str(iter.next().ok_or_else(|| "No hash type")?)
+        let hash_type = GeneralHashType::from_str(iter.next().ok_or("No hash type")?)
             .map_err(|_| "Failed to parse hash type")?;
 
         #[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
         let data = match hash_type {
             GeneralHashType::NULL => Vec::new(),
             _ => {
-                let data = iter.next().ok_or_else(|| "No hash data")?;
+                let data = iter.next().ok_or("No hash data")?;
                 utils::decode_hex(data).map_err(|_| "Failed to decode hash data")?
             }
         };

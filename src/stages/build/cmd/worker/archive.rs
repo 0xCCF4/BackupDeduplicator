@@ -51,7 +51,7 @@ struct Context {
 }
 
 #[allow(dead_code)]
-fn worker_run_entry<'a, R: Read>(entry: ArchiveEntry<'a, R>, context: &mut Context) -> BuildFile {
+fn worker_run_entry<R: Read>(entry: ArchiveEntry<R>, context: &mut Context) -> BuildFile {
     let path = match entry.path() {
         Ok(path) => path,
         Err(err) => {

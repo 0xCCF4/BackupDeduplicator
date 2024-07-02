@@ -165,7 +165,7 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
         mut args: Vec<Argument>,
         func: WorkerEntry<Job, Result, Argument>,
     ) -> ThreadPool<Job, Result> {
-        assert!(args.len() > 0);
+        assert!(!args.is_empty());
 
         let mut workers = Vec::with_capacity(args.len());
 
@@ -217,11 +217,8 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
                 None => {
                     error!("ThreadPool is shutting down. Cannot publish job.");
                 }
-                Some(job_publish) => match job_publish.send(job) {
-                    Err(e) => {
-                        error!("Failed to publish job on thread pool. {}", e);
-                    }
-                    Ok(_) => {}
+                Some(job_publish) => if let Err(e) = job_publish.send(job) {
+                    error!("Failed to publish job on thread pool. {}", e);
                 },
             },
         }

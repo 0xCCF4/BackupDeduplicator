@@ -44,31 +44,28 @@ pub fn worker_run_file(
 ) {
     trace!("[{}] analyzing file {} > {:?}", id, &job.target_path, path);
 
-    match worker_fetch_savedata(arg, &job.target_path) {
-        Some(found) => {
-            if found.file_type == HashTreeFileEntryType::File
-                && found.modified == modified
-                && found.size == size
-            {
-                trace!("File {:?} is already in save file", path);
-                worker_publish_result_or_trigger_parent(
-                    id,
-                    true,
-                    BuildFile::File(BuildFileInformation {
-                        path: job.target_path.clone(),
-                        modified,
-                        content_hash: found.hash.clone(),
-                        content_size: size,
-                    }),
-                    job,
-                    result_publish,
-                    job_publish,
-                    arg,
-                );
-                return;
-            }
+    if let Some(found) = worker_fetch_savedata(arg, &job.target_path) {
+        if found.file_type == HashTreeFileEntryType::File
+            && found.modified == modified
+            && found.size == size
+        {
+            trace!("File {:?} is already in save file", path);
+            worker_publish_result_or_trigger_parent(
+                id,
+                true,
+                BuildFile::File(BuildFileInformation {
+                    path: job.target_path.clone(),
+                    modified,
+                    content_hash: found.hash.clone(),
+                    content_size: size,
+                }),
+                job,
+                result_publish,
+                job_publish,
+                arg,
+            );
+            return;
         }
-        None => {}
     }
 
     let mut hasher = match File::open(&path) {
@@ -126,7 +123,7 @@ pub fn worker_run_file(
             Ok(None) => Ok(None),
             Ok(Some((compression_type, archive_type))) => {
                 let stream = compression_type.open(&mut stream);
-                worker_run_archive(stream, &path, archive_type, id, arg).map(|result| Some(result))
+                worker_run_archive(stream, &path, archive_type, id, arg).map(Some)
             }
         }
     };
@@ -148,10 +145,8 @@ pub fn worker_run_file(
         Ok(content) => content,
     };
 
-    let content_size;
-
     // finalize hashing
-    if arg.hash_type != GeneralHashType::NULL {
+    let content_size = if arg.hash_type != GeneralHashType::NULL {
         match std::io::copy(&mut stream, &mut std::io::sink()) {
             Ok(_) => {}
             Err(err) => {
@@ -169,12 +164,12 @@ pub fn worker_run_file(
             }
         }
         drop(stream);
-        content_size = hasher.bytes_processed();
+        hasher.bytes_processed()
     } else {
-        content_size = fs::metadata(&path)
+        fs::metadata(&path)
             .map(|metadata| metadata.len())
-            .unwrap_or(0);
-    }
+            .unwrap_or(0)
+    };
 
     let hash = hasher.hash();
 
@@ -194,7 +189,6 @@ pub fn worker_run_file(
         }),
     };
     worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
-    return;
 }
 
 /// Check if the file is an archive (potentially compressed).

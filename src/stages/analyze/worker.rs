@@ -73,7 +73,7 @@ static JOB_COUNTER: Mutex<usize> = Mutex::new(0);
 fn new_job_counter_id() -> usize {
     let mut counter = JOB_COUNTER.lock().expect("Failed to lock job counter");
     *counter += 1;
-    (*counter).clone()
+    *counter
 }
 
 /// The result for the analysis worker.
@@ -91,18 +91,15 @@ impl ResultTrait for AnalysisResult {}
 /// # Returns
 /// The parent file and the parent path.
 /// If the parent file is not present, return None.
-fn parent_file<'a, 'b>(
-    file: &'b AnalysisIntermediaryFile,
+fn parent_file<'a>(
+    file: &AnalysisIntermediaryFile,
     arg: &'a AnalysisWorkerArgument,
 ) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
     match file.saved_file_entry.path.parent() {
         None => None,
         Some(parent_path) => {
             let cache = arg.file_by_path.get(&parent_path).map(|file| &file.file);
-            match cache {
-                None => None,
-                Some(cache) => Some((cache, parent_path)),
-            }
+            cache.map(|cache| (cache, parent_path))
         }
     }
 }
@@ -166,30 +163,21 @@ fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgume
 
     if let Some((result, parent, parent_path)) = attach_parent {
         match add_to_parent_as_child(id, parent, &result) {
-            AddToParentResult::Ok => {
-                return;
-            }
+            AddToParentResult::Ok => {}
             AddToParentResult::ParentDoesNotExist => {
                 // parent does not exist
                 // create it
                 recursive_process_file(id, &parent_path, arg);
                 // try to read to parent again
                 match add_to_parent_as_child(id, parent, &result) {
-                    AddToParentResult::Ok => {
-                        return;
-                    }
+                    AddToParentResult::Ok => {}
                     AddToParentResult::ParentDoesNotExist => {
                         error!("[{}] Parent still does not exist", id);
-                        return;
                     }
-                    AddToParentResult::Error => {
-                        return;
-                    }
+                    AddToParentResult::Error => {}
                 }
             }
-            AddToParentResult::Error => {
-                return;
-            }
+            AddToParentResult::Error => {}
         }
     }
 }

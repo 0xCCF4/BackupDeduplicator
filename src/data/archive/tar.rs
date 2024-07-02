@@ -9,13 +9,13 @@ pub struct TarArchive<R: Read> {
 
 impl<'a, R: Read> TarArchive<R> {
     /// Create a new Tar archive from a reader.
-    /// 
+    ///
     /// # Arguments
     /// * `input` - The input reader.
-    /// 
+    ///
     /// # Returns
     /// The Tar archive.
-    /// 
+    ///
     /// # Errors
     /// If the archive is invalid or cannot be read.
     pub fn new(input: R) -> Result<TarArchive<R>> {
@@ -25,10 +25,10 @@ impl<'a, R: Read> TarArchive<R> {
     }
 
     /// Get the entries of the Tar archive.
-    /// 
+    ///
     /// # Returns
     /// An iterator over the entries of the Tar archive.
-    /// 
+    ///
     /// # Errors
     /// If the entries cannot be read.
     pub fn entries(&'a mut self) -> Result<TarArchiveIterator<'a, R>> {
@@ -43,10 +43,10 @@ pub struct TarArchiveIterator<'a, R: 'a + Read> {
 
 impl<'a, R: Read> TarArchiveIterator<'a, R> {
     /// Create a new Tar archive iterator from a reader.
-    /// 
+    ///
     /// # Arguments
     /// * `entries` - The entries.
-    /// 
+    ///
     /// # Returns
     /// The Tar archive iterator.
     pub fn new(entries: tar::Entries<'a, R>) -> TarArchiveIterator<'a, R> {

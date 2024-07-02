@@ -50,7 +50,7 @@ impl LexicalAbsolute for PathBuf {
                 std::path::Component::ParentDir => {
                     absolute.pop();
                 }
-                component @ _ => absolute.push(component.as_os_str()),
+                component => absolute.push(component.as_os_str()),
             }
         }
         Ok(absolute)
@@ -101,17 +101,8 @@ pub fn get_time() -> u64 {
 /// let mut writer = backup_deduplicator::utils::NullWriter::new();
 /// writer.write(b"Hello, world!").unwrap();
 /// ```
+#[derive(Default)]
 pub struct NullWriter {}
-
-impl NullWriter {
-    /// Create a new NullWriter.
-    ///
-    /// # Returns
-    /// A new NullWriter.
-    pub fn new() -> Self {
-        NullWriter {}
-    }
-}
 
 impl Write for NullWriter {
     /// Discard all data.
@@ -147,17 +138,8 @@ impl Write for NullWriter {
 /// let mut buf = [0; 10];
 /// assert_eq!(reader.read(&mut buf).unwrap(), 0);
 /// ```
+#[derive(Default)]
 pub struct NullReader {}
-
-impl NullReader {
-    /// Create a new NullReader.
-    ///
-    /// # Returns
-    /// A new NullReader.
-    pub fn new() -> Self {
-        NullReader {}
-    }
-}
 
 impl std::io::Read for NullReader {
     /// Does not provide any data.
@@ -186,13 +168,13 @@ impl std::io::Seek for NullReader {
 
 /// Container that calls a function when value is dropped.
 #[deprecated]
-pub struct DestroyContainer<T, F: FnOnce() -> ()> {
+pub struct DestroyContainer<T, F: FnOnce()> {
     inner: T,
     destroy_func: Option<F>,
 }
 
 #[allow(deprecated)]
-impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
+impl<T, F: FnOnce()> DestroyContainer<T, F> {
     /// Create a new [DestroyContainer]. The destroy function is called when `this`
     /// instance is dropped.
     ///
@@ -211,14 +193,14 @@ impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
 }
 
 #[allow(deprecated)]
-impl<T, F: FnOnce() -> ()> Drop for DestroyContainer<T, F> {
+impl<T, F: FnOnce()> Drop for DestroyContainer<T, F> {
     fn drop(&mut self) {
-        self.destroy_func.take().map(|f| f());
+        if let Some(f) = self.destroy_func.take() { f() }
     }
 }
 
 #[allow(deprecated)]
-impl<T, F: FnOnce() -> ()> Deref for DestroyContainer<T, F> {
+impl<T, F: FnOnce()> Deref for DestroyContainer<T, F> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -227,7 +209,7 @@ impl<T, F: FnOnce() -> ()> Deref for DestroyContainer<T, F> {
 }
 
 #[allow(deprecated)]
-impl<T: Read, F: FnOnce() -> ()> Read for DestroyContainer<T, F> {
+impl<T: Read, F: FnOnce()> Read for DestroyContainer<T, F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
@@ -314,13 +296,11 @@ pub mod main {
 
         let path = path.to_path_buf();
 
-        let path = match kind {
+        match kind {
             ParsePathKind::Direct => path,
             ParsePathKind::AbsoluteExisting => to_lexical_absolute(path, true),
             ParsePathKind::AbsoluteNonExisting => to_lexical_absolute(path, false),
-        };
-
-        path
+        }
     }
 
     /// Convert a path to a absolute path.
@@ -340,14 +320,12 @@ pub mod main {
             false => path.to_lexical_absolute(),
         };
 
-        let path = match path {
+        match path {
             Ok(out) => out,
             Err(e) => {
                 eprintln!("IO error, could not resolve output file: {:?}", e);
                 std::process::exit(exitcode::CONFIG);
             }
-        };
-
-        path
+        }
     }
 }

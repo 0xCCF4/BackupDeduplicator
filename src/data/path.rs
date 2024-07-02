@@ -152,7 +152,7 @@ impl FilePath {
             }
         }
 
-        return result;
+        result
     }
 
     /// Gets the parent of the file path.
@@ -239,7 +239,7 @@ impl std::fmt::Display for FilePath {
                 result.push_str("| ");
             }
 
-            result.push_str(component.path.to_str().unwrap_or_else(|| "<invalid path>"));
+            result.push_str(component.path.to_str().unwrap_or("<invalid path>"));
         }
 
         write!(f, "{}", result)

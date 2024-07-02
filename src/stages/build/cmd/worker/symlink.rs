@@ -40,49 +40,46 @@ pub fn worker_run_symlink(
         path
     );
 
-    match worker_fetch_savedata(arg, &job.target_path) {
-        Some(found) => {
-            if found.file_type == HashTreeFileEntryType::Symlink
-                && found.modified == modified
-                && found.size == size
-            {
-                trace!("Symlink {:?} is already in save file", path);
-                let target_link = fs::read_link(&path);
-                let target_link = match target_link {
-                    Ok(target_link) => target_link,
-                    Err(err) => {
-                        error!("Error while reading symlink {:?}: {}", path, err);
-                        worker_publish_result_or_trigger_parent(
-                            id,
-                            false,
-                            worker_create_error(job.target_path.clone(), modified, size),
-                            job,
-                            result_publish,
-                            job_publish,
-                            arg,
-                        );
-                        return;
-                    }
-                };
-                worker_publish_result_or_trigger_parent(
-                    id,
-                    true,
-                    BuildFile::Symlink(BuildSymlinkInformation {
-                        path: job.target_path.clone(),
-                        modified,
-                        content_hash: found.hash.clone(),
-                        target: target_link,
-                        content_size: size,
-                    }),
-                    job,
-                    result_publish,
-                    job_publish,
-                    arg,
-                );
-                return;
-            }
+    if let Some(found) = worker_fetch_savedata(arg, &job.target_path) {
+        if found.file_type == HashTreeFileEntryType::Symlink
+            && found.modified == modified
+            && found.size == size
+        {
+            trace!("Symlink {:?} is already in save file", path);
+            let target_link = fs::read_link(&path);
+            let target_link = match target_link {
+                Ok(target_link) => target_link,
+                Err(err) => {
+                    error!("Error while reading symlink {:?}: {}", path, err);
+                    worker_publish_result_or_trigger_parent(
+                        id,
+                        false,
+                        worker_create_error(job.target_path.clone(), modified, size),
+                        job,
+                        result_publish,
+                        job_publish,
+                        arg,
+                    );
+                    return;
+                }
+            };
+            worker_publish_result_or_trigger_parent(
+                id,
+                true,
+                BuildFile::Symlink(BuildSymlinkInformation {
+                    path: job.target_path.clone(),
+                    modified,
+                    content_hash: found.hash.clone(),
+                    target: target_link,
+                    content_size: size,
+                }),
+                job,
+                result_publish,
+                job_publish,
+                arg,
+            );
+            return;
         }
-        None => {}
     }
 
     let target_link = fs::read_link(&path);

@@ -72,7 +72,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     };
 
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
-    let mut null_out_writer = NullWriter::new();
+    let mut null_out_writer = NullWriter::default();
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
     let mut save_file = HashTreeFile::new(
@@ -118,7 +118,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 
     // create thread pool
 
-    let mut args = Vec::with_capacity(analysis_settings.threads.unwrap_or_else(|| num_cpus::get()));
+    let mut args = Vec::with_capacity(analysis_settings.threads.unwrap_or_else(num_cpus::get));
     for _ in 0..args.capacity() {
         args.push(AnalysisWorkerArgument {
             file_by_path: Arc::clone(&file_by_path),
@@ -131,15 +131,8 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         pool.publish(AnalysisJob::new(Arc::clone(entry)));
     }
 
-    loop {
-        match pool.receive_timeout(Duration::from_secs(10)) {
-            Ok(result) => {
-                info!("Result: {:?}", result);
-            }
-            Err(_) => {
-                break;
-            }
-        }
+    while let Ok(result) = pool.receive_timeout(Duration::from_secs(10)) {
+        info!("Result: {:?}", result);
     }
 
     drop(pool);
@@ -157,35 +150,20 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
                     // check if parent is also conflicting
 
                     let parent = parent.upgrade().unwrap();
-                    let parent_hash;
-                    match parent.deref() {
-                        AnalysisFile::File(info) => {
-                            parent_hash = Some(&info.content_hash);
-                        }
-                        AnalysisFile::Directory(info) => {
-                            parent_hash = Some(&info.content_hash);
-                        }
-                        AnalysisFile::Symlink(info) => {
-                            parent_hash = Some(&info.content_hash);
-                        }
-                        AnalysisFile::Other(_) => {
-                            parent_hash = None;
-                        }
-                    }
+                    let parent_hash = match parent.deref() {
+                        AnalysisFile::File(info) => Some(&info.content_hash),
+                        AnalysisFile::Directory(info) => Some(&info.content_hash),
+                        AnalysisFile::Symlink(info) => Some(&info.content_hash),
+                        AnalysisFile::Other(_) => None,
+                    };
 
-                    let parent_conflicting;
-
-                    match parent_hash {
-                        None => {
-                            parent_conflicting = false;
-                        }
-                        Some(parent_hash) => {
-                            parent_conflicting = match file_by_hash.get(parent_hash) {
-                                Some(entries) => entries.len() >= 2,
-                                None => false,
-                            }
-                        }
-                    }
+                    let parent_conflicting = match parent_hash {
+                        None => false,
+                        Some(parent_hash) => match file_by_hash.get(parent_hash) {
+                            Some(entries) => entries.len() >= 2,
+                            None => false,
+                        },
+                    };
 
                     if !parent_conflicting {
                         duplicated_bytes +=
@@ -244,7 +222,7 @@ fn write_result_entry(
             ftype: &file.file_type,
             children: &file.children,
         })
-        .or_insert(Vec::new())
+        .or_default()
         .push(file);
     }
 
@@ -266,20 +244,20 @@ fn write_result_entry(
         }
 
         let result = DupSetEntryRef {
-            ftype: &set.0.ftype,
+            ftype: set.0.ftype,
             size: set.0.size,
             hash,
             conflicting,
         };
-        output_buf_writer
+        let _ = output_buf_writer
             .write(serde_json::to_string(&result).unwrap().as_bytes())
             .expect("Unable to write to file");
-        output_buf_writer
+        let _ = output_buf_writer
             .write('\n'.to_string().as_bytes())
             .expect("Unable to write to file");
 
         result_size += result.size * (result.conflicting.len() as u64 - 1);
     }
 
-    return result_size;
+    result_size
 }

@@ -155,8 +155,8 @@ impl<R: Read> BufferCopyStreamReader<R> {
             let read_result = reader.read(read_buffer)?;
 
             buffer.reserve(read_result);
-            for i in 0..read_result {
-                buffer.push(read_buffer[i]);
+            for value in read_buffer.iter().take(read_result) {
+                buffer.push(*value);
             }
 
             Ok(read_result)
@@ -174,14 +174,14 @@ impl<R: Read> BufferCopyStreamReader<R> {
     /// Buffer the given amount of bytes from the underlying reader in chunks.
     /// This method will allocate a buffer with the given size once. Then reuse this buffer
     /// for reading the data from the underlying reader.
-    /// 
+    ///
     /// # Arguments
     /// * `length` - The amount of bytes to buffer.
     /// * `chunk_size` - The amount of bytes to request from the underlying reader in each iteration.
-    /// 
+    ///
     /// # Returns
     /// The amount of bytes read.
-    /// 
+    ///
     /// # Errors
     /// If the underlying reader could not be read.
     pub fn buffer_bytes_chunked(&self, length: usize, chunk_size: usize) -> std::io::Result<usize> {
@@ -207,13 +207,13 @@ impl<R: Read> BufferCopyStreamReader<R> {
 
     /// Buffer the given amount of bytes from the underlying reader in chunks.
     /// Uses a default chunk size of 4096 bytes.
-    /// 
+    ///
     /// # Arguments
     /// * `length` - The amount of bytes to buffer.
-    /// 
+    ///
     /// # Returns
     /// The amount of bytes read.
-    /// 
+    ///
     /// # Errors
     /// If the underlying reader could not be read.
     pub fn buffer_bytes_chunked_default(&self, length: usize) -> std::io::Result<usize> {
@@ -291,7 +291,7 @@ impl<R: Read> Seek for BufferCopyStreamReader<R> {
                     ));
                 }
 
-                if (-requested_position as u64) > (buffer_length as u64) {
+                if (-requested_position as u64) > buffer_length {
                     return Err(std::io::Error::new(
                         ErrorKind::Other,
                         "can not seek beyond zero",
@@ -391,7 +391,7 @@ impl<R: Read> BufferFirstContinueReader<R> {
     /// # Returns
     /// True if the buffer is empty.
     pub fn buffer_empty(&self) -> bool {
-        self.buffer.len() <= 0 || self.index >= self.buffer.len()
+        self.buffer.is_empty() || self.index >= self.buffer.len()
     }
 
     /// Try to get the original reader back from the [BufferFirstContinueReader].

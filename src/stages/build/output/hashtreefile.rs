@@ -8,11 +8,11 @@ use anyhow::Result;
 use log::{info, trace, warn};
 use serde::{Deserialize, Serialize};
 
-pub use HashTreeFileEntryTypeV1 as HashTreeFileEntryType;
-pub use HashTreeFileEntryV1 as HashTreeFileEntry;
 use crate::hash::{GeneralHash, GeneralHashType};
 use crate::path::FilePath;
 use crate::utils;
+pub use HashTreeFileEntryTypeV1 as HashTreeFileEntryType;
+pub use HashTreeFileEntryV1 as HashTreeFileEntry;
 
 /// The current version of the hash tree file.
 pub type HashTreeFileEntryRef<'a> = HashTreeFileEntryV1Ref<'a>;
@@ -283,7 +283,7 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
             if self.enable_file_by_hash {
                 self.file_by_hash
                     .entry(shared_entry.hash.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(Arc::clone(&shared_entry));
             }
 
@@ -320,7 +320,7 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
     /// # Error
     /// If reading from the file errors
     pub fn load_all_entries<F: Fn(&HashTreeFileEntry) -> bool>(&mut self, filter: F) -> Result<()> {
-        while let Some(_) = self.load_entry(&filter)? {}
+        while (self.load_entry(&filter)?).is_some() {}
 
         Ok(())
     }

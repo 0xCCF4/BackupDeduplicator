@@ -12,13 +12,13 @@ pub struct ZipArchive<R: Read> {
 impl<R: Read> ZipArchive<R> {
     /// Create a new Zip archive from a reader.
     /// Does not perform any checking on the input. The input is assumed to be a valid Zip archive.
-    /// 
+    ///
     /// # Arguments
     /// * `input` - The input reader.
-    /// 
+    ///
     /// # Returns
     /// The Zip archive.
-    /// 
+    ///
     /// # Errors
     /// Never.
     pub fn new(input: R) -> Result<ZipArchive<R>> {
@@ -28,10 +28,10 @@ impl<R: Read> ZipArchive<R> {
     }
 
     /// Get the entries of the Zip archive.
-    /// 
+    ///
     /// # Returns
     /// The entries of the Zip archive.
-    /// 
+    ///
     /// # Errors
     /// Never
     pub fn entries(&mut self) -> Result<ZipArchiveIterator<R>> {
@@ -46,10 +46,10 @@ pub struct ZipArchiveIterator<'a, R: Read> {
 
 impl<'a, R: Read> ZipArchiveIterator<'a, R> {
     /// Create a new Zip archive iterator from a reader.
-    /// 
+    ///
     /// # Arguments
     /// * `reader` - The reader.
-    /// 
+    ///
     /// # Returns
     /// The Zip archive iterator.
     pub fn new(reader: &'a mut Pin<Box<R>>) -> ZipArchiveIterator<'a, R> {

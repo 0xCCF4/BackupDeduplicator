@@ -12,7 +12,7 @@ static JOB_COUNTER: Mutex<usize> = Mutex::new(0);
 fn new_job_counter_id() -> usize {
     let mut counter = JOB_COUNTER.lock().expect("Failed to lock job counter");
     *counter += 1;
-    (*counter).clone()
+    *counter
 }
 
 /// The state of a build job. Used to track the state of a directory process job.

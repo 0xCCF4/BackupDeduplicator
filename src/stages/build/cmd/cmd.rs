@@ -117,7 +117,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
 
     // create thread pool
 
-    let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(|| num_cpus::get()));
+    let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(num_cpus::get));
     for _ in 0..args.capacity() {
         args.push(WorkerArgument {
             archives: build_settings.into_archives,
@@ -157,5 +157,5 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         }
     }
 
-    return Ok(());
+    Ok(())
 }

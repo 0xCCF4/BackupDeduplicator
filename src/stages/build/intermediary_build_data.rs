@@ -140,7 +140,7 @@ pub enum BuildFile {
     /// A file that is not a regular file, directory, or symlink, or a file for which permissions are missing.
     Other(BuildOtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
     /// A file that is not kept in memory but already saved to disk in the hashtree file.
-    Stub(BuildStubInformation),   // for files that are already analyzed
+    Stub(BuildStubInformation), // for files that are already analyzed
 }
 
 // ---- IMPLEMENTATION ----
@@ -181,10 +181,7 @@ impl BuildFile {
     /// # Returns
     /// True if this is a directory, false otherwise.
     pub fn is_directory(&self) -> bool {
-        match self {
-            BuildFile::Directory(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::Directory(_))
     }
 
     /// Returns true if this is a symlink
@@ -192,10 +189,7 @@ impl BuildFile {
     /// # Returns
     /// True if this is a symlink, false otherwise.
     pub fn is_symlink(&self) -> bool {
-        match self {
-            BuildFile::Symlink(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::Symlink(_))
     }
 
     /// Returns true if this is a file
@@ -203,11 +197,7 @@ impl BuildFile {
     /// # Returns
     /// True if this is a file, false otherwise.
     pub fn is_file(&self) -> bool {
-        match self {
-            BuildFile::File(_) => true,
-            BuildFile::ArchiveFile(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::File(_) | BuildFile::ArchiveFile(_))
     }
 
     /// Returns true if this is an archive file
@@ -215,10 +205,7 @@ impl BuildFile {
     /// # Returns
     /// True if this is an archive file, false otherwise.
     pub fn is_archive(&self) -> bool {
-        match self {
-            BuildFile::ArchiveFile(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::ArchiveFile(_))
     }
 
     /// Returns true if this is an "other" file
@@ -226,10 +213,7 @@ impl BuildFile {
     /// # Returns
     /// True if this is an "other" file, false otherwise.
     pub fn is_other(&self) -> bool {
-        match self {
-            BuildFile::Other(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::Other(_))
     }
 
     /// Returns true if this is a stub file
@@ -237,9 +221,6 @@ impl BuildFile {
     /// # Returns
     /// True if this is a stub file, false otherwise.
     pub fn is_stub(&self) -> bool {
-        match self {
-            BuildFile::Stub(_) => true,
-            _ => false,
-        }
+        matches!(self, BuildFile::Stub(_))
     }
 }

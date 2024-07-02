@@ -30,7 +30,7 @@ impl ArchiveType {
     /// # Errors
     /// If the archive could not be opened.
     pub fn open<R: Read>(&self, stream: R) -> Result<GeneralArchive<R>> {
-        GeneralArchive::new(self.clone(), stream)
+        GeneralArchive::new(*self, stream)
     }
 
     /// Get the archive type from the file extension.
@@ -89,7 +89,7 @@ impl ArchiveType {
         while stream.limit() > 0 {
             let num_read = stream.read(&mut buffer[num_read_sum..])?;
             num_read_sum += num_read;
-            if num_read <= 0 {
+            if num_read == 0 {
                 break;
             }
         }
@@ -109,7 +109,7 @@ impl ArchiveType {
         #[cfg(feature = "archive-tar")]
         {
             if num_read_sum >= 257 + 8
-                && buffer[257 + 0] == 0x75
+                && buffer[257] == 0x75
                 && buffer[257 + 1] == 0x73
                 && buffer[257 + 2] == 0x74
                 && buffer[257 + 3] == 0x61
@@ -122,7 +122,7 @@ impl ArchiveType {
             }
 
             if num_read_sum >= 257 + 8
-                && buffer[257 + 0] == 0x75
+                && buffer[257] == 0x75
                 && buffer[257 + 1] == 0x73
                 && buffer[257 + 2] == 0x74
                 && buffer[257 + 3] == 0x61
@@ -148,7 +148,7 @@ impl ArchiveType {
             }
         }
 
-        return Ok(None);
+        Ok(None)
     }
 }
 
@@ -169,7 +169,7 @@ impl<R: Read> GeneralArchive<R> {
             #[cfg(feature = "archive-tar")]
             ArchiveType::Tar => Self::Tar(tar::TarArchive::new(stream)?),
             #[cfg(feature = "archive-zip")]
-            ArchiveType::Zip => Self::Zip(zip::ZipArchive::new(stream.into())?),
+            ArchiveType::Zip => Self::Zip(zip::ZipArchive::new(stream)?),
         })
     }
 
@@ -246,7 +246,7 @@ impl<'a, R: Read> ArchiveEntry<'a, R> {
 
     /// Get the modified time of the archive entry.
     /// The time is in seconds since the Unix epoch.
-    /// 
+    ///
     /// # Returns
     /// The modified time of the archive entry.
     /// Might be 0 if the time could not be determined.
