@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
-use serde::Serialize;
-use crate::stages::build::intermediary_build_data::BuildFile;
 use crate::path::FilePath;
 use crate::pool::{JobTrait, ResultTrait};
+use crate::stages::build::intermediary_build_data::BuildFile;
+use serde::Serialize;
+use std::sync::{Arc, Mutex};
 
 pub type SharedBuildJob = Arc<BuildJob>;
 
@@ -15,7 +15,7 @@ fn new_job_counter_id() -> usize {
 }
 
 /// The state of a build job. Used to track the state of a directory process job.
-/// 
+///
 /// # Fields
 /// * `NotProcessed` - The job has not been processed yet.
 /// * `Analyzed` - The directory has been expanded and can be analyzed further.
@@ -26,7 +26,7 @@ pub enum BuildJobState {
 }
 
 /// A build job. Used to issue a job to hash a file/directory.
-/// 
+///
 /// # Fields
 /// * `parent` - The parent job of this job.
 /// * `finished_children` - The finished children of this job.
@@ -43,11 +43,11 @@ pub struct BuildJob {
 
 impl BuildJob {
     /// Create a new build job.
-    /// 
+    ///
     /// # Arguments
     /// * `parent` - The parent job of this job.
     /// * `target_path` - The path of the file/directory to hash.
-    /// 
+    ///
     /// # Returns
     /// The created build job.
     pub fn new(parent: Option<SharedBuildJob>, target_path: FilePath) -> Self {
@@ -59,9 +59,9 @@ impl BuildJob {
             finished_children: Mutex::new(Vec::new()),
         }
     }
-    
+
     /// Get the job id.
-    /// 
+    ///
     /// # Returns
     /// The job id.
     pub fn job_id(&self) -> usize {
@@ -69,7 +69,7 @@ impl BuildJob {
     }
 
     /// Create and assign a new unique job id.
-    /// 
+    ///
     /// # Returns
     /// The build job with the new job id.
     pub fn new_job_id(mut self) -> Self {
@@ -80,7 +80,7 @@ impl BuildJob {
 
 impl JobTrait for BuildJob {
     /// Get the job id.
-    /// 
+    ///
     /// # Returns
     /// The job id.
     fn job_id(&self) -> usize {
@@ -100,7 +100,7 @@ pub struct JobResultContent {
 }
 
 /// A job result.
-/// 
+///
 /// # Fields
 /// * `Final` - The final result of command. Returned if the job has no parent.
 /// * `Intermediate` - An intermediate result of a command. Returned if the job has a parent.
@@ -110,7 +110,4 @@ pub enum JobResult {
     Intermediate(JobResultContent),
 }
 
-impl ResultTrait for JobResult {
-
-}
-
+impl ResultTrait for JobResult {}

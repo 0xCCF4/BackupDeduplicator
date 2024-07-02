@@ -25,10 +25,10 @@ and removed to save disk space (feature in development).
   not only the hash but also the file size and file types are compared to reduce
   the probability of false positives. When choosing a weak hash function (with many
   false duplicates), the tool may run slower.
+* **Archive support**: The tool can traverse into archives like zip
+  or tar files to find duplicated structures there.
 
 ### Planned-features
-* **Archive support**: The tool will be able to traverse into archives like zip
-  or tar files to find duplicated structures there.
 * **CUI**: A graphical command line interface will be added to allow easy duplicate
   processing (removal/excluding/...).
 * **Multi machine analysis**: The tool will be able to analyze a (shared) directory 

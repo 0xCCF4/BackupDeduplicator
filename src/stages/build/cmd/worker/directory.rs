@@ -1,18 +1,21 @@
+use crate::hash::GeneralHash;
+use crate::stages::build::cmd::job::{BuildJob, BuildJobState, JobResult};
+use crate::stages::build::cmd::worker::{
+    worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent,
+    WorkerArgument,
+};
+use crate::stages::build::intermediary_build_data::{BuildDirectoryInformation, BuildFile};
+use crate::stages::build::output::HashTreeFileEntryType;
+use log::{error, trace};
 use std::fs;
 use std::fs::DirEntry;
 use std::ops::DerefMut;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::Sender;
-use log::{error, trace};
-use crate::stages::build::intermediary_build_data::{BuildDirectoryInformation, BuildFile};
-use crate::hash::GeneralHash;
-use crate::stages::build::cmd::job::{BuildJob, BuildJobState, JobResult};
-use crate::stages::build::cmd::worker::{worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent, WorkerArgument};
-use crate::stages::build::output::HashTreeFileEntryType;
+use std::sync::Arc;
 
 /// Analyze a directory.
-/// 
+///
 /// # Arguments
 /// * `path` - The path to the directory.
 /// * `modified` - The last modified time of the directory.
@@ -22,8 +25,22 @@ use crate::stages::build::output::HashTreeFileEntryType;
 /// * `result_publish` - The channel to publish the result to.
 /// * `job_publish` - The channel to publish new jobs to.
 /// * `arg` - The argument for the worker thread.
-pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, mut job: BuildJob, result_publish: &Sender<JobResult>, job_publish: &Sender<BuildJob>, arg: &mut WorkerArgument) {
-    trace!("[{}] analyzing directory {} > {:?}", id, &job.target_path, path);
+pub fn worker_run_directory(
+    path: PathBuf,
+    modified: u64,
+    size: u64,
+    id: usize,
+    mut job: BuildJob,
+    result_publish: &Sender<JobResult>,
+    job_publish: &Sender<BuildJob>,
+    arg: &mut WorkerArgument,
+) {
+    trace!(
+        "[{}] analyzing directory {} > {:?}",
+        id,
+        &job.target_path,
+        path
+    );
 
     match job.state {
         BuildJobState::NotProcessed => {
@@ -32,22 +49,27 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 Ok(read_dir) => read_dir,
                 Err(err) => {
                     error!("Error while reading directory {:?}: {}", path, err);
-                    worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
+                    worker_publish_result_or_trigger_parent(
+                        id,
+                        false,
+                        worker_create_error(job.target_path.clone(), modified, size),
+                        job,
+                        result_publish,
+                        job_publish,
+                        arg,
+                    );
                     return;
                 }
             };
             let mut read_dir: Vec<DirEntry> = read_dir
-                .filter_map(|entry| {
-                    match entry {
-                        Ok(entry) => {
-                            Some(entry)
-                        },
-                        Err(err) => {
-                            error!("Error while reading directory entry {:?}: {}", path, err);
-                            None
-                        }
+                .filter_map(|entry| match entry {
+                    Ok(entry) => Some(entry),
+                    Err(err) => {
+                        error!("Error while reading directory entry {:?}: {}", path, err);
+                        None
                     }
-                }).collect();
+                })
+                .collect();
             read_dir.sort_by_key(|entry| entry.file_name());
 
             let mut children = Vec::new();
@@ -71,13 +93,13 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
 
             for job in jobs {
                 match job_publish.send(job) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         error!("[{}] failed to publish job: {}", id, e);
                     }
                 }
             }
-        },
+        }
         BuildJobState::Analyzed => {
             let mut hash = GeneralHash::from_type(arg.hash_type);
             let mut children = Vec::new();
@@ -86,15 +108,28 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
             let mut error;
             match job.finished_children.lock() {
                 Ok(mut finished) => {
-                    finished.sort_by(|a, b| a.get_content_hash().partial_cmp(b.get_content_hash()).expect("Two hashes must compare to each other"));
+                    finished.sort_by(|a, b| {
+                        a.get_content_hash()
+                            .partial_cmp(b.get_content_hash())
+                            .expect("Two hashes must compare to each other")
+                    });
 
                     error = false;
-                    
+
                     // query cache
                     match worker_fetch_savedata(arg, &job.target_path) {
                         Some(found) => {
-                            if found.file_type == HashTreeFileEntryType::Directory && found.modified == modified && found.size == finished.len() as u64 {
-                                if found.children.len() == finished.len() && found.children.iter().zip(finished.iter().map(|e| e.get_content_hash())).all(|(a, b)| a == b) {
+                            if found.file_type == HashTreeFileEntryType::Directory
+                                && found.modified == modified
+                                && found.size == finished.len() as u64
+                            {
+                                if found.children.len() == finished.len()
+                                    && found
+                                        .children
+                                        .iter()
+                                        .zip(finished.iter().map(|e| e.get_content_hash()))
+                                        .all(|(a, b)| a == b)
+                                {
                                     trace!("Directory {:?} is already in save file", path);
 
                                     let mut children = Vec::new();
@@ -117,7 +152,7 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
 
                     if cached_entry.is_none() {
                         match hash.hash_directory(finished.iter()) {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(err) => {
                                 error = true;
                                 error!("Error while hashing directory {:?}: {}", path, err);
@@ -132,12 +167,28 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 }
             }
             if error {
-                worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
+                worker_publish_result_or_trigger_parent(
+                    id,
+                    false,
+                    worker_create_error(job.target_path.clone(), modified, size),
+                    job,
+                    result_publish,
+                    job_publish,
+                    arg,
+                );
                 return;
             }
 
             if let Some(file) = cached_entry {
-                worker_publish_result_or_trigger_parent(id, true, file, job, result_publish, job_publish, arg);
+                worker_publish_result_or_trigger_parent(
+                    id,
+                    true,
+                    file,
+                    job,
+                    result_publish,
+                    job_publish,
+                    arg,
+                );
                 return;
             }
 
@@ -149,7 +200,15 @@ pub fn worker_run_directory(path: PathBuf, modified: u64, size: u64, id: usize, 
                 children,
             });
 
-            worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
+            worker_publish_result_or_trigger_parent(
+                id,
+                false,
+                file,
+                job,
+                result_publish,
+                job_publish,
+                arg,
+            );
         }
     }
 }

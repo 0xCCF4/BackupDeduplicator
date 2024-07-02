@@ -1,13 +1,18 @@
-use crate::stages::build::intermediary_build_data::{BuildArchiveFileInformation, BuildDirectoryInformation, BuildFile, BuildFileInformation, BuildOtherInformation, BuildStubInformation, BuildSymlinkInformation};
 use crate::hash::GeneralHash;
-use crate::stages::build::output::{HashTreeFileEntryType, HashTreeFileEntry, HashTreeFileEntryRef};
+use crate::stages::build::intermediary_build_data::{
+    BuildArchiveFileInformation, BuildDirectoryInformation, BuildFile, BuildFileInformation,
+    BuildOtherInformation, BuildStubInformation, BuildSymlinkInformation,
+};
+use crate::stages::build::output::{
+    HashTreeFileEntry, HashTreeFileEntryRef, HashTreeFileEntryType,
+};
 
 impl From<BuildFileInformation> for HashTreeFileEntry {
     /// Convert a [BuildFileInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildFileInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildFileInformation) -> Self {
@@ -25,10 +30,10 @@ impl From<BuildFileInformation> for HashTreeFileEntry {
 
 impl From<BuildArchiveFileInformation> for HashTreeFileEntry {
     /// Convert a [BuildArchiveFileInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildArchiveFileInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildArchiveFileInformation) -> Self {
@@ -50,10 +55,10 @@ impl From<BuildArchiveFileInformation> for HashTreeFileEntry {
 
 impl From<BuildSymlinkInformation> for HashTreeFileEntry {
     /// Convert a [BuildSymlinkInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildSymlinkInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildSymlinkInformation) -> Self {
@@ -71,10 +76,10 @@ impl From<BuildSymlinkInformation> for HashTreeFileEntry {
 
 impl From<BuildDirectoryInformation> for HashTreeFileEntry {
     /// Convert a [BuildDirectoryInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildDirectoryInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildDirectoryInformation) -> Self {
@@ -96,10 +101,10 @@ impl From<BuildDirectoryInformation> for HashTreeFileEntry {
 
 impl From<BuildOtherInformation> for HashTreeFileEntry {
     /// Convert a [BuildOtherInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildOtherInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildOtherInformation) -> Self {
@@ -117,10 +122,10 @@ impl From<BuildOtherInformation> for HashTreeFileEntry {
 
 impl From<BuildStubInformation> for HashTreeFileEntry {
     /// Convert a [BuildStubInformation] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildStubInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildStubInformation) -> Self {
@@ -138,10 +143,10 @@ impl From<BuildStubInformation> for HashTreeFileEntry {
 
 impl<'a> From<&'a BuildFileInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildFileInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildFileInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildFileInformation) -> Self {
@@ -159,10 +164,10 @@ impl<'a> From<&'a BuildFileInformation> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a BuildArchiveFileInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildArchiveFileInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildArchiveFileInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildArchiveFileInformation) -> Self {
@@ -184,10 +189,10 @@ impl<'a> From<&'a BuildArchiveFileInformation> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a BuildSymlinkInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildSymlinkInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildSymlinkInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildSymlinkInformation) -> Self {
@@ -205,10 +210,10 @@ impl<'a> From<&'a BuildSymlinkInformation> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a BuildDirectoryInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildDirectoryInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildDirectoryInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildDirectoryInformation) -> Self {
@@ -230,10 +235,10 @@ impl<'a> From<&'a BuildDirectoryInformation> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a BuildOtherInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildOtherInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildOtherInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildOtherInformation) -> Self {
@@ -251,10 +256,10 @@ impl<'a> From<&'a BuildOtherInformation> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a BuildStubInformation> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildStubInformation] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildStubInformation] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildStubInformation) -> Self {
@@ -272,10 +277,10 @@ impl<'a> From<&'a BuildStubInformation> for HashTreeFileEntryRef<'a> {
 
 impl From<BuildFile> for HashTreeFileEntry {
     /// Convert a [BuildFile] into a [HashTreeFileEntry].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The [BuildFile] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntry].
     fn from(value: BuildFile) -> Self {
@@ -292,10 +297,10 @@ impl From<BuildFile> for HashTreeFileEntry {
 
 impl<'a> From<&'a BuildFile> for HashTreeFileEntryRef<'a> {
     /// Convert a [BuildFile] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [BuildFile] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a BuildFile) -> Self {
@@ -312,10 +317,10 @@ impl<'a> From<&'a BuildFile> for HashTreeFileEntryRef<'a> {
 
 impl<'a> From<&'a HashTreeFileEntry> for HashTreeFileEntryRef<'a> {
     /// Convert a [HashTreeFileEntry] into a [HashTreeFileEntryRef].
-    /// 
+    ///
     /// # Arguments
     /// * `value` - The reference to the [HashTreeFileEntry] to convert.
-    /// 
+    ///
     /// # Returns
     /// The converted [HashTreeFileEntryRef].
     fn from(value: &'a HashTreeFileEntry) -> Self {

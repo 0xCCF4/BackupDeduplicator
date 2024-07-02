@@ -1,10 +1,10 @@
-use std::path::{PathBuf};
-use serde::{Deserialize, Serialize};
 use crate::hash::GeneralHash;
 use crate::path::FilePath;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Information about an analyzed file.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the file.
 /// * `modified` - The last modification time of the file.
@@ -19,7 +19,7 @@ pub struct BuildFileInformation {
 }
 
 /// Information about an analyzed archive file.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the archive file.
 /// * `modified` - The last modification time of the archive file.
@@ -36,7 +36,7 @@ pub struct BuildArchiveFileInformation {
 }
 
 /// Information about an analyzed directory.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the directory.
 /// * `modified` - The last modification time of the directory.
@@ -53,7 +53,7 @@ pub struct BuildDirectoryInformation {
 }
 
 /// Information about an analyzed symlink.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the symlink.
 /// * `modified` - The last modification time of the symlink.
@@ -71,7 +71,7 @@ pub struct BuildSymlinkInformation {
 
 /// Information about an analyzed file that is not a regular file, directory, or symlink.
 /// This could be sockets, block devices, character devices, etc. or file for which permissions are missing.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the file.
 /// * `modified` - The last modification time of the file.
@@ -84,7 +84,7 @@ pub struct BuildOtherInformation {
 }
 
 /// Information about a file that is not kept in memory but saved to disk.
-/// 
+///
 /// # Fields
 /// * `path` - The path of the file.
 /// * `content_hash` - The hash of the file content.
@@ -95,7 +95,7 @@ pub struct BuildStubInformation {
 }
 
 /// A file that has been analyzed.
-/// 
+///
 /// # Variants
 /// * `File` - A regular file.
 /// * `ArchiveFile` - An archive file (special variant of file, including subtree).
@@ -110,14 +110,14 @@ pub enum BuildFile {
     Directory(BuildDirectoryInformation),
     Symlink(BuildSymlinkInformation),
     Other(BuildOtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
-    Stub(BuildStubInformation), // for files that are already analyzed
+    Stub(BuildStubInformation),   // for files that are already analyzed
 }
 
 // ---- IMPLEMENTATION ----
 
 impl BuildFile {
     /// Get the hash of a file
-    /// 
+    ///
     /// # Returns
     /// The hash of the file. If the file is of type `Other` the hash is [GeneralHash::NULL].
     pub fn get_content_hash(&self) -> &GeneralHash {
@@ -130,9 +130,9 @@ impl BuildFile {
             BuildFile::Stub(info) => &info.content_hash,
         }
     }
-    
+
     /// Gets the path of this file
-    /// 
+    ///
     /// # Returns
     /// The path of the file.
     pub fn get_path(&self) -> &FilePath {
@@ -147,7 +147,7 @@ impl BuildFile {
     }
 
     /// Returns true if this is a directory
-    /// 
+    ///
     /// # Returns
     /// True if this is a directory, false otherwise.
     pub fn is_directory(&self) -> bool {
@@ -158,7 +158,7 @@ impl BuildFile {
     }
 
     /// Returns true if this is a symlink
-    /// 
+    ///
     /// # Returns
     /// True if this is a symlink, false otherwise.
     pub fn is_symlink(&self) -> bool {
@@ -169,7 +169,7 @@ impl BuildFile {
     }
 
     /// Returns true if this is a file
-    /// 
+    ///
     /// # Returns
     /// True if this is a file, false otherwise.
     pub fn is_file(&self) -> bool {
@@ -179,9 +179,9 @@ impl BuildFile {
             _ => false,
         }
     }
-    
+
     /// Returns true if this is an archive file
-    /// 
+    ///
     /// # Returns
     /// True if this is an archive file, false otherwise.
     pub fn is_archive(&self) -> bool {
@@ -192,7 +192,7 @@ impl BuildFile {
     }
 
     /// Returns true if this is an "other" file
-    /// 
+    ///
     /// # Returns
     /// True if this is an "other" file, false otherwise.
     pub fn is_other(&self) -> bool {
@@ -201,9 +201,9 @@ impl BuildFile {
             _ => false,
         }
     }
-    
+
     /// Returns true if this is a stub file
-    /// 
+    ///
     /// # Returns
     /// True if this is a stub file, false otherwise.
     pub fn is_stub(&self) -> bool {

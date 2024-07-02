@@ -1,7 +1,6 @@
-
 pub mod output {
     mod dupset_file;
-    
+
     pub use dupset_file::*;
 }
 

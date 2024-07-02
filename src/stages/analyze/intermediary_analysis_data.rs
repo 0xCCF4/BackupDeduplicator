@@ -1,8 +1,8 @@
-use std::sync::Weak;
-use std::sync::{Arc, Mutex};
-use serde::{Deserialize, Serialize};
 use crate::hash::GeneralHash;
 use crate::path::FilePath;
+use serde::{Deserialize, Serialize};
+use std::sync::Weak;
+use std::sync::{Arc, Mutex};
 
 /// The result of the analysis worker.
 #[derive(Debug, Serialize, Deserialize)]

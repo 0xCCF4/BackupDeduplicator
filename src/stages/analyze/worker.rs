@@ -1,12 +1,15 @@
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::Sender;
-use log::error;
 use crate::path::FilePath;
 use crate::pool::{JobTrait, ResultTrait};
-use crate::stages::analyze::intermediary_analysis_data::{AnalysisFile, AnalysisDirectoryInformation, AnalysisFileInformation, AnalysisOtherInformation, AnalysisSymlinkInformation};
+use crate::stages::analyze::intermediary_analysis_data::{
+    AnalysisDirectoryInformation, AnalysisFile, AnalysisFileInformation, AnalysisOtherInformation,
+    AnalysisSymlinkInformation,
+};
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
+use log::error;
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 
 /// The intermediary file for the analysis worker.
 ///
@@ -73,13 +76,11 @@ fn new_job_counter_id() -> usize {
     (*counter).clone()
 }
 
-
 /// The result for the analysis worker.
 #[derive(Debug)]
 pub struct AnalysisResult {}
 
 impl ResultTrait for AnalysisResult {}
-
 
 /// Get the parent file of a file. Searches the arg.cache for the parent file.
 ///
@@ -90,18 +91,17 @@ impl ResultTrait for AnalysisResult {}
 /// # Returns
 /// The parent file and the parent path.
 /// If the parent file is not present, return None.
-fn parent_file<'a, 'b>(file: &'b AnalysisIntermediaryFile, arg: &'a AnalysisWorkerArgument) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
+fn parent_file<'a, 'b>(
+    file: &'b AnalysisIntermediaryFile,
+    arg: &'a AnalysisWorkerArgument,
+) -> Option<(&'a Arc<Mutex<Option<Arc<AnalysisFile>>>>, FilePath)> {
     match file.saved_file_entry.path.parent() {
         None => None,
         Some(parent_path) => {
             let cache = arg.file_by_path.get(&parent_path).map(|file| &file.file);
             match cache {
-                None => {
-                    None
-                },
-                Some(cache) => {
-                    Some((cache, parent_path))
-                }
+                None => None,
+                Some(cache) => Some((cache, parent_path)),
             }
         }
     }
@@ -116,31 +116,25 @@ fn parent_file<'a, 'b>(file: &'b AnalysisIntermediaryFile, arg: &'a AnalysisWork
 /// * `arg` - The argument for the worker thread.
 fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgument) {
     let marked_file = arg.file_by_path.get(path);
-    
+
     let mut attach_parent = None;
-    
+
     if let Some(file) = marked_file {
         let result = match file.saved_file_entry.file_type {
-            HashTreeFileEntryType::File => {
-                AnalysisFile::File(AnalysisFileInformation {
-                    path: file.saved_file_entry.path.clone(),
-                    content_hash: file.saved_file_entry.hash.clone(),
-                    parent: Mutex::new(None),
-                })
-            },
-            HashTreeFileEntryType::Symlink => {
-                AnalysisFile::Symlink(AnalysisSymlinkInformation {
-                    path: file.saved_file_entry.path.clone(),
-                    content_hash: file.saved_file_entry.hash.clone(),
-                    parent: Mutex::new(None),
-                })
-            },
-            HashTreeFileEntryType::Other => {
-                AnalysisFile::Other(AnalysisOtherInformation {
-                    path: file.saved_file_entry.path.clone(),
-                    parent: Mutex::new(None),
-                })
-            },
+            HashTreeFileEntryType::File => AnalysisFile::File(AnalysisFileInformation {
+                path: file.saved_file_entry.path.clone(),
+                content_hash: file.saved_file_entry.hash.clone(),
+                parent: Mutex::new(None),
+            }),
+            HashTreeFileEntryType::Symlink => AnalysisFile::Symlink(AnalysisSymlinkInformation {
+                path: file.saved_file_entry.path.clone(),
+                content_hash: file.saved_file_entry.hash.clone(),
+                parent: Mutex::new(None),
+            }),
+            HashTreeFileEntryType::Other => AnalysisFile::Other(AnalysisOtherInformation {
+                path: file.saved_file_entry.path.clone(),
+                parent: Mutex::new(None),
+            }),
             HashTreeFileEntryType::Directory => {
                 AnalysisFile::Directory(AnalysisDirectoryInformation {
                     path: file.saved_file_entry.path.clone(),
@@ -159,7 +153,7 @@ fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgume
                 } else {
                     return; // is already some
                 }
-            },
+            }
             Err(err) => {
                 panic!("[{}] Failed to lock file: {}", id, err);
             }
@@ -169,26 +163,30 @@ fn recursive_process_file(id: usize, path: &FilePath, arg: &AnalysisWorkerArgume
             attach_parent = Some((result, parent, parent_path));
         }
     }
-    
+
     if let Some((result, parent, parent_path)) = attach_parent {
         match add_to_parent_as_child(id, parent, &result) {
-            AddToParentResult::Ok => { return; },
+            AddToParentResult::Ok => {
+                return;
+            }
             AddToParentResult::ParentDoesNotExist => {
                 // parent does not exist
                 // create it
                 recursive_process_file(id, &parent_path, arg);
                 // try to read to parent again
                 match add_to_parent_as_child(id, parent, &result) {
-                    AddToParentResult::Ok => { return; },
+                    AddToParentResult::Ok => {
+                        return;
+                    }
                     AddToParentResult::ParentDoesNotExist => {
                         error!("[{}] Parent still does not exist", id);
                         return;
-                    },
+                    }
                     AddToParentResult::Error => {
                         return;
                     }
                 }
-            },
+            }
             AddToParentResult::Error => {
                 return;
             }
@@ -217,25 +215,29 @@ enum AddToParentResult {
 ///
 /// # Returns
 /// The result of the operation.
-fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>, child: &Arc<AnalysisFile>) -> AddToParentResult {
+fn add_to_parent_as_child(
+    id: usize,
+    parent: &Arc<Mutex<Option<Arc<AnalysisFile>>>>,
+    child: &Arc<AnalysisFile>,
+) -> AddToParentResult {
     match parent.lock() {
         Ok(guard) => {
             // exclusive access to parent file
             match guard.deref() {
                 Some(parent) => {
                     // parent already present
-                    
+
                     match child.parent().lock() {
                         Ok(mut guard) => {
                             // set parent
                             *guard = Some(Arc::downgrade(parent));
-                        },
+                        }
                         Err(err) => {
                             error!("[{}] Failed to lock parent: {}", id, err);
                             return AddToParentResult::Error;
                         }
                     }
-                    
+
                     match parent.deref() {
                         AnalysisFile::Directory(dir) => {
                             match dir.children.lock() {
@@ -243,25 +245,25 @@ fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>
                                     // add as child
                                     guard.push(Arc::clone(child));
                                     AddToParentResult::Ok
-                                },
+                                }
                                 Err(err) => {
                                     error!("[{}] Failed to lock children: {}", id, err);
                                     AddToParentResult::Error
                                 }
                             }
-                        },
+                        }
                         _ => {
                             error!("[{}] Parent is not a directory", id);
                             AddToParentResult::Error
                         }
                     }
-                },
+                }
                 None => {
                     // parent not yet present
                     AddToParentResult::ParentDoesNotExist
                 }
             }
-        },
+        }
         Err(err) => {
             error!("[{}] Failed to lock file: {}", id, err);
             AddToParentResult::Error
@@ -272,6 +274,12 @@ fn add_to_parent_as_child(id: usize, parent: &Arc<Mutex<Option<Arc<AnalysisFile>
 /// The main function for the analysis worker.
 ///
 /// # Arguments
-pub fn worker_run(id: usize, job: AnalysisJob, _result_publish: &Sender<AnalysisResult>, _job_publish: &Sender<AnalysisJob>, arg: &mut AnalysisWorkerArgument) {
+pub fn worker_run(
+    id: usize,
+    job: AnalysisJob,
+    _result_publish: &Sender<AnalysisResult>,
+    _job_publish: &Sender<AnalysisJob>,
+    arg: &mut AnalysisWorkerArgument,
+) {
     recursive_process_file(id, &job.file.path, arg);
 }

@@ -1,14 +1,14 @@
-use sha1::Digest;
 use crate::hash::{GeneralHash, GeneralHasher};
+use sha1::Digest;
 
 pub struct Sha1Hasher {
-    hasher: sha1::Sha1
+    hasher: sha1::Sha1,
 }
 
 impl GeneralHasher for Sha1Hasher {
     fn new() -> Self {
         Sha1Hasher {
-            hasher: sha1::Sha1::new()
+            hasher: sha1::Sha1::new(),
         }
     }
 

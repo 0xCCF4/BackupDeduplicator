@@ -1,10 +1,10 @@
-use serde::{Serialize};
 use crate::hash::GeneralHash;
 use crate::path::FilePath;
 use crate::stages::build::output::HashTreeFileEntryType;
+use serde::Serialize;
 
 /// The result of the analysis worker. A duplicate set entry.
-/// 
+///
 /// # Fields
 /// * `ftype` - The type of the file.
 /// * `size` - The size of the file.

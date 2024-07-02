@@ -1,19 +1,13 @@
 use crate::hash::{GeneralHash, GeneralHasher};
 
-pub struct NullHasher {
-    
-}
+pub struct NullHasher {}
 
 impl GeneralHasher for NullHasher {
     fn new() -> Self {
-        NullHasher {
-            
-        }
+        NullHasher {}
     }
 
-    fn update(&mut self, _data: &[u8]) {
-        
-    }
+    fn update(&mut self, _data: &[u8]) {}
 
     fn finalize(self: Box<Self>) -> GeneralHash {
         GeneralHash::NULL

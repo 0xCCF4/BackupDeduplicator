@@ -1,12 +1,12 @@
-use std::fs;
-use std::path::PathBuf;
-use anyhow::{anyhow, Result};
-use log::{info, trace, warn};
 use crate::hash::GeneralHashType;
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntryType};
+use anyhow::{anyhow, Result};
+use log::{info, trace, warn};
+use std::fs;
+use std::path::PathBuf;
 
 /// Settings for the clean stage.
-/// 
+///
 /// # Fields
 /// * `input` - The input hashtree file to clean.
 /// * `output` - The output hashtree file to write the cleaned hashtree to.
@@ -20,12 +20,10 @@ pub struct CleanSettings {
 }
 
 /// Run the clean command.
-/// 
+///
 /// # Arguments
 /// * `clean_settings` - The settings for the clean command.
-pub fn run(
-    clean_settings: CleanSettings,
-) -> Result<()> {
+pub fn run(clean_settings: CleanSettings) -> Result<()> {
     let mut input_file_options = fs::File::options();
     input_file_options.read(true);
     input_file_options.write(false);
@@ -51,50 +49,55 @@ pub fn run(
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
-    let mut save_file = HashTreeFile::new(&mut output_buf_writer, &mut input_buf_reader, GeneralHashType::NULL, false, true, true);
+    let mut save_file = HashTreeFile::new(
+        &mut output_buf_writer,
+        &mut input_buf_reader,
+        GeneralHashType::NULL,
+        false,
+        true,
+        true,
+    );
     save_file.load_header()?;
 
     // remove duplicates, remove deleted files
-    save_file.load_all_entries(|entry| {
-        match entry.path.resolve_file() {
-            Ok(path) => {
-                if !path.exists() {
-                    return false;
-                }
-                
-                let metadata = match clean_settings.follow_symlinks { 
-                    true => fs::metadata(path),
-                    false => fs::symlink_metadata(path)
-                };
-                let metadata = match metadata {
-                    Ok(data) => Some(data),
-                    Err(err) => {
-                        warn!("Unable to read metadata of {:?}: {}", entry.path, err);
-                        None
-                    }
-                };
-                
-                if let Some(metadata) = metadata {
-                    return if metadata.is_symlink() {
-                        entry.file_type == HashTreeFileEntryType::Symlink
-                    } else if metadata.is_dir() {
-                        entry.file_type == HashTreeFileEntryType::Directory
-                    } else if metadata.is_file() {
-                        entry.file_type == HashTreeFileEntryType::File
-                    } else {
-                        entry.file_type == HashTreeFileEntryType::Other
-                    }
-                }
-                
-                true
-            },
-            Err(err) => {
-                warn!("File {:?} resolving failed: {}", entry.path, err);
-                true
+    save_file.load_all_entries(|entry| match entry.path.resolve_file() {
+        Ok(path) => {
+            if !path.exists() {
+                return false;
             }
+
+            let metadata = match clean_settings.follow_symlinks {
+                true => fs::metadata(path),
+                false => fs::symlink_metadata(path),
+            };
+            let metadata = match metadata {
+                Ok(data) => Some(data),
+                Err(err) => {
+                    warn!("Unable to read metadata of {:?}: {}", entry.path, err);
+                    None
+                }
+            };
+
+            if let Some(metadata) = metadata {
+                return if metadata.is_symlink() {
+                    entry.file_type == HashTreeFileEntryType::Symlink
+                } else if metadata.is_dir() {
+                    entry.file_type == HashTreeFileEntryType::Directory
+                } else if metadata.is_file() {
+                    entry.file_type == HashTreeFileEntryType::File
+                } else {
+                    entry.file_type == HashTreeFileEntryType::Other
+                };
+            }
+
+            true
+        }
+        Err(err) => {
+            warn!("File {:?} resolving failed: {}", entry.path, err);
+            true
         }
     })?;
-    
+
     // todo filter files deleted from inside archives
 
     // save results
@@ -104,7 +107,7 @@ pub fn run(
     for entry in save_file.all_entries.iter() {
         save_file.write_entry(entry)?;
     }
-    
+
     save_file.flush()?;
 
     trace!("Truncating output file.");

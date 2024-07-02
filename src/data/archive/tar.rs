@@ -1,6 +1,6 @@
-use std::io::Read;
-use anyhow::{anyhow, Result};
 use crate::archive::ArchiveEntry;
+use anyhow::{anyhow, Result};
+use std::io::Read;
 
 pub struct TarArchive<R: Read> {
     archive: tar::Archive<R>,
@@ -12,7 +12,7 @@ impl<'a, R: Read> TarArchive<R> {
             archive: tar::Archive::new(input),
         })
     }
-    
+
     pub fn entries(&'a mut self) -> Result<TarArchiveIterator<'a, R>> {
         Ok(TarArchiveIterator::new(self.archive.entries()?))
     }
@@ -24,19 +24,18 @@ pub struct TarArchiveIterator<'a, R: 'a + Read> {
 
 impl<'a, R: Read> TarArchiveIterator<'a, R> {
     pub fn new(entries: tar::Entries<'a, R>) -> TarArchiveIterator<'a, R> {
-        TarArchiveIterator {
-            entries,
-        }
+        TarArchiveIterator { entries }
     }
 }
 
 impl<'a, R: Read> Iterator for TarArchiveIterator<'a, R> {
     type Item = Result<ArchiveEntry<'a, R>>;
     fn next(&mut self) -> Option<Self::Item> {
-        self.entries.next().map(
-            | result | result
+        self.entries.next().map(|result| {
+            result
                 .map(ArchiveEntry::TarEntry)
-                .map_err(|err| anyhow!("Failed to read tar entry: {}", err)))
+                .map_err(|err| anyhow!("Failed to read tar entry: {}", err))
+        })
     }
 }
 

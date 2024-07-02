@@ -1,18 +1,17 @@
-use xxhash_rust::{xxh32, xxh64};
 use crate::hash::{GeneralHash, GeneralHasher};
+use xxhash_rust::{xxh32, xxh64};
 
 pub struct Xxh64Hasher {
-    hasher: xxh64::Xxh64
+    hasher: xxh64::Xxh64,
 }
 pub struct Xxh32Hasher {
-    hasher: xxh32::Xxh32
+    hasher: xxh32::Xxh32,
 }
-
 
 impl GeneralHasher for Xxh64Hasher {
     fn new() -> Self {
         Xxh64Hasher {
-            hasher: xxh64::Xxh64::default()
+            hasher: xxh64::Xxh64::default(),
         }
     }
 
@@ -27,7 +26,7 @@ impl GeneralHasher for Xxh64Hasher {
 impl GeneralHasher for Xxh32Hasher {
     fn new() -> Self {
         Xxh32Hasher {
-            hasher: xxh32::Xxh32::new(0)
+            hasher: xxh32::Xxh32::new(0),
         }
     }
 

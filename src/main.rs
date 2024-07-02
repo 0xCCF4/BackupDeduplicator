@@ -1,13 +1,13 @@
-use std::{env};
-use std::str::FromStr;
-use clap::{arg, Parser, Subcommand};
-use log::{debug, info, LevelFilter, trace};
 use backup_deduplicator::hash::GeneralHashType;
 use backup_deduplicator::stages::analyze::cmd::AnalysisSettings;
-use backup_deduplicator::stages::{analyze, build, clean};
 use backup_deduplicator::stages::build::cmd::BuildSettings;
 use backup_deduplicator::stages::clean::cmd::CleanSettings;
+use backup_deduplicator::stages::{analyze, build, clean};
 use backup_deduplicator::utils;
+use clap::{arg, Parser, Subcommand};
+use log::{debug, info, trace, LevelFilter};
+use std::env;
+use std::str::FromStr;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -53,13 +53,13 @@ enum Command {
         #[arg(short, long)]
         working_directory: Option<String>,
         /// Force overwrite, if set, the tool will overwrite the output file if it exists. If not set, the tool will continue an existing analysis
-        #[arg(long="overwrite", default_value = "false")]
+        #[arg(long = "overwrite", default_value = "false")]
         recreate_output: bool,
         /// Hash algorithm to use
-        #[arg(long="hash", default_value = "sha256")]
+        #[arg(long = "hash", default_value = "sha256")]
         hash_type: String,
         /// Disable database clean after run, if set the tool will not clean the database after the creation
-        #[arg(long="noclean", default_value = "false")]
+        #[arg(long = "noclean", default_value = "false")]
         no_clean: bool,
     },
     /// Clean a hash-tree file. Removes all files that are not existing anymore. Removes old file versions.
@@ -74,7 +74,7 @@ enum Command {
         #[arg(short, long)]
         working_directory: Option<String>,
         /// Overwrite the output file
-        #[arg(long="overwrite", default_value = "false")]
+        #[arg(long = "overwrite", default_value = "false")]
         overwrite: bool,
         /// Root directory, if set remove all files that are not subfiles of this directory
         #[arg(long)]
@@ -92,7 +92,7 @@ enum Command {
         #[arg(short, long, default_value = "analysis.json")]
         output: String,
         /// Overwrite the output file
-        #[arg(long="overwrite", default_value = "false")]
+        #[arg(long = "overwrite", default_value = "false")]
         overwrite: bool,
     },
 }
@@ -114,7 +114,7 @@ fn main() {
     env_logger::init();
 
     trace!("Initializing program");
-    
+
     if let Some(threads) = args.threads {
         if threads <= 0 {
             eprintln!("Invalid number of threads: {}", threads);
@@ -135,25 +135,37 @@ fn main() {
             working_directory,
             recreate_output,
             hash_type,
-            no_clean
+            no_clean,
         } => {
             debug!("Running build command");
-            
+
             // Check hash_type
-            
+
             let hash_type = match GeneralHashType::from_str(hash_type.as_str()) {
                 Ok(hash) => hash,
                 Err(supported) => {
-                    eprintln!("Unsupported hash type: {}. The values {} are supported.", hash_type.as_str(), supported);
+                    eprintln!(
+                        "Unsupported hash type: {}. The values {} are supported.",
+                        hash_type.as_str(),
+                        supported
+                    );
                     std::process::exit(exitcode::CONFIG);
                 }
             };
 
             // Convert to paths and check if they exist
 
-            let directory = utils::main::parse_path(directory.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
-            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
-            let working_directory = working_directory.map(|w| utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting));
+            let directory = utils::main::parse_path(
+                directory.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
+            let output = utils::main::parse_path(
+                output.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
+            let working_directory = working_directory.map(|w| {
+                utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting)
+            });
 
             if !directory.exists() {
                 eprintln!("Target directory does not exist: {}", directory.display());
@@ -166,8 +178,14 @@ fn main() {
                     std::process::exit(exitcode::CONFIG);
                 }
                 None => {
-                    debug!("Output file does not have a parent directory: {}", output.display());
-                    eprintln!("IO error, output file location invalid: {}", output.display());
+                    debug!(
+                        "Output file does not have a parent directory: {}",
+                        output.display()
+                    );
+                    eprintln!(
+                        "IO error, output file location invalid: {}",
+                        output.display()
+                    );
                     std::process::exit(exitcode::CONFIG);
                 }
                 _ => {}
@@ -202,18 +220,18 @@ fn main() {
                 // absolute_paths,
                 threads: args.threads,
                 continue_file: !recreate_output,
-                hash_type
+                hash_type,
             }) {
                 Ok(_) => {
                     info!("Build command completed successfully");
-                    
+
                     if !no_clean {
                         info!("Executing clean command");
                         match clean::cmd::run(CleanSettings {
                             input: output.clone(),
                             output: output,
                             root: None,
-                            follow_symlinks
+                            follow_symlinks,
                         }) {
                             Ok(_) => {
                                 info!("Clean command completed successfully");
@@ -231,38 +249,49 @@ fn main() {
                     std::process::exit(exitcode::SOFTWARE);
                 }
             }
-        },
+        }
         Command::Clean {
             input,
             output,
             overwrite,
             root,
             working_directory,
-            follow_symlinks
+            follow_symlinks,
         } => {
-            let input = utils::main::parse_path(input.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
-            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
+            let input = utils::main::parse_path(
+                input.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
+            let output = utils::main::parse_path(
+                output.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
 
             // Change working directory
             trace!("Changing working directory");
 
-            utils::main::change_working_directory(working_directory.map(|w| utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting)));
+            utils::main::change_working_directory(working_directory.map(|w| {
+                utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting)
+            }));
 
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
                 std::process::exit(exitcode::CONFIG);
             }
-            
+
             if output.exists() && !overwrite {
-                eprintln!("Output file already exists: {:?}. Set --override to override its content", output);
+                eprintln!(
+                    "Output file already exists: {:?}. Set --override to override its content",
+                    output
+                );
                 std::process::exit(exitcode::CONFIG);
             }
-            
+
             match clean::cmd::run(CleanSettings {
                 input,
                 output,
                 root,
-                follow_symlinks
+                follow_symlinks,
             }) {
                 Ok(_) => {
                     info!("Clean command completed successfully");
@@ -273,22 +302,31 @@ fn main() {
                     std::process::exit(exitcode::SOFTWARE);
                 }
             }
-        },
+        }
         Command::Analyze {
             input,
             output,
-            overwrite
+            overwrite,
         } => {
-            let input = utils::main::parse_path(input.as_str(), utils::main::ParsePathKind::AbsoluteExisting);
-            let output = utils::main::parse_path(output.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting);
+            let input = utils::main::parse_path(
+                input.as_str(),
+                utils::main::ParsePathKind::AbsoluteExisting,
+            );
+            let output = utils::main::parse_path(
+                output.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
 
             if !input.exists() {
                 eprintln!("Input file does not exist: {:?}", input);
                 std::process::exit(exitcode::CONFIG);
             }
-            
+
             if output.exists() && !overwrite {
-                eprintln!("Output file already exists: {:?}. Set --override to override its content", output);
+                eprintln!(
+                    "Output file already exists: {:?}. Set --override to override its content",
+                    output
+                );
                 std::process::exit(exitcode::CONFIG);
             }
 
@@ -306,6 +344,6 @@ fn main() {
                     std::process::exit(exitcode::SOFTWARE);
                 }
             }
-        },
+        }
     }
 }

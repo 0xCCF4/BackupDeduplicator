@@ -1,17 +1,17 @@
-use sha2::Digest;
 use crate::hash::{GeneralHash, GeneralHasher};
+use sha2::Digest;
 
 pub struct Sha512Hasher {
-    hasher: sha2::Sha512
+    hasher: sha2::Sha512,
 }
 pub struct Sha256Hasher {
-    hasher: sha2::Sha256
+    hasher: sha2::Sha256,
 }
 
 impl GeneralHasher for Sha512Hasher {
     fn new() -> Self {
         Sha512Hasher {
-            hasher: sha2::Sha512::new()
+            hasher: sha2::Sha512::new(),
         }
     }
 
@@ -26,7 +26,7 @@ impl GeneralHasher for Sha512Hasher {
 impl GeneralHasher for Sha256Hasher {
     fn new() -> Self {
         Sha256Hasher {
-            hasher: sha2::Sha256::new()
+            hasher: sha2::Sha256::new(),
         }
     }
 

@@ -1,9 +1,8 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::fmt::Formatter;
-use std::path::{PathBuf};
-use anyhow::{Result};
-use serde::{Deserialize, Serialize};
-
+use std::path::PathBuf;
 
 /// A path component. A path points to a file or an archive.
 ///
@@ -44,7 +43,7 @@ pub struct PathComponent {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct FilePath {
-    pub path: Vec<PathComponent>
+    pub path: Vec<PathComponent>,
 }
 
 impl FilePath {
@@ -56,9 +55,7 @@ impl FilePath {
     /// # Returns
     /// The file path.
     pub fn from_pathcomponents(path: Vec<PathComponent>) -> Self {
-        FilePath {
-            path
-        }
+        FilePath { path }
     }
 
     /// Creates a new file path from a real path.
@@ -70,25 +67,23 @@ impl FilePath {
     /// The file path.
     pub fn from_realpath<P: Into<PathBuf>>(path: P) -> Self {
         FilePath {
-            path: vec![PathComponent {
-                path: path.into(),
-            }]
+            path: vec![PathComponent { path: path.into() }],
         }
     }
-    
+
     /// Creates a new subpath from a file path. By starting a nested file path.
-    /// 
+    ///
     /// # Returns
     /// The new file path.
     pub fn new_archive(&self) -> FilePath {
         let mut result = FilePath {
-            path: self.path.clone()
+            path: self.path.clone(),
         };
-        
+
         result.path.push(PathComponent {
             path: PathBuf::from(String::from("")),
         });
-        
+
         result
     }
 
@@ -103,7 +98,9 @@ impl FilePath {
         if self.path.len() == 1 {
             Ok(self.path[0].path.clone())
         } else {
-            Err(anyhow::anyhow!("Cannot resolve file path with multiple components"))
+            Err(anyhow::anyhow!(
+                "Cannot resolve file path with multiple components"
+            ))
         }
     }
 
@@ -139,22 +136,20 @@ impl FilePath {
     /// ```
     pub fn child<Str: Into<OsString>>(&self, child_name: Str) -> FilePath {
         let mut result = FilePath {
-            path: self.path.clone()
+            path: self.path.clone(),
         };
-        
+
         let component = PathBuf::from(child_name.into());
-        
+
         match result.path.last_mut() {
             Some(last) => {
                 last.path.push(component);
-            },
+            }
             None => {
-                result.path.push(PathComponent {
-                    path: component,
-                });
+                result.path.push(PathComponent { path: component });
             }
         }
-        
+
         return result;
     }
 
@@ -180,28 +175,28 @@ impl FilePath {
     /// ```
     pub fn parent(&self) -> Option<FilePath> {
         let last = self.path.last();
-        
-        match last { 
+
+        match last {
             None => None,
             Some(last) => {
                 let parent = last.path.parent();
-                
+
                 match parent {
                     Some(parent) => {
                         let mut result = FilePath {
-                            path: self.path.clone()
+                            path: self.path.clone(),
                         };
                         let last = result.path.last_mut().unwrap();
                         last.path = parent.to_path_buf();
-                        
+
                         Some(result)
-                    },
+                    }
                     None => {
                         if self.path.len() == 1 {
                             None
                         } else {
                             let mut result = FilePath {
-                                path: self.path.clone()
+                                path: self.path.clone(),
                             };
                             result.path.pop();
                             Some(result)
@@ -215,14 +210,15 @@ impl FilePath {
 
 impl PartialEq for FilePath {
     /// Compares two file paths.
-    /// 
+    ///
     /// # Arguments
     /// * `other` - The other file path.
-    /// 
+    ///
     /// # Returns
     /// Whether the file paths are equal.
     fn eq(&self, other: &Self) -> bool {
-        self.path.len() == other.path.len() && self.path.iter().zip(other.path.iter()).all(|(a, b)| a == b)
+        self.path.len() == other.path.len()
+            && self.path.iter().zip(other.path.iter()).all(|(a, b)| a == b)
     }
 }
 
@@ -232,18 +228,18 @@ impl std::fmt::Display for FilePath {
     /// Formats the file path to a string.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut result = String::new();
-        
-        let mut first = true; 
+
+        let mut first = true;
         for component in &self.path {
             if first {
                 first = false;
             } else {
                 result.push_str("| ");
             }
-            
+
             result.push_str(component.path.to_str().unwrap_or_else(|| "<invalid path>"));
         }
-        
+
         write!(f, "{}", result)
     }
 }

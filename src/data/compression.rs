@@ -1,11 +1,11 @@
-use std::io::Read;
-use anyhow::{Result};
-use serde::{Deserialize, Serialize};
 use crate::copy_stream::BufferCopyStreamReader;
 use crate::utils;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::io::Read;
 
 /// Compression type
-/// 
+///
 /// # Fields
 /// * `Gz` - Gzip compression. Enabled by the `compress-flate2` feature.
 /// * `Xz` - Xz compression. Enabled by the `compress-xz` feature.
@@ -21,10 +21,10 @@ pub enum CompressionType {
 
 impl CompressionType {
     /// Create a decompressor for the compression type.
-    /// 
+    ///
     /// # Arguments
     /// * `input` - The input to decompress.
-    /// 
+    ///
     /// # Returns
     /// A decompressed stream.
     pub fn open<'a, R: Read + 'a>(&self, input: R) -> Box<dyn Read + 'a> {
@@ -36,12 +36,12 @@ impl CompressionType {
             CompressionType::Null => Box::new(input),
         }
     }
-    
+
     /// Get the compression type from the file extension.
-    /// 
+    ///
     /// # Arguments
     /// * `extension` - The file extension.
-    /// 
+    ///
     /// # Returns
     /// The compression type.
     pub fn from_extension(extension: &str) -> CompressionType {
@@ -53,36 +53,36 @@ impl CompressionType {
             _ => CompressionType::Null,
         }
     }
-    
+
     /// Get the maximum amount of bytes to peek from the stream to determine the compression type.
-    /// 
+    ///
     /// # Returns
     /// The maximum amount of bytes to peek needed to determine the compression type.
     pub const fn max_stream_peek_count() -> usize {
         const MAX_BYTES_FLATE: usize = match cfg!(feature = "compress-flate2") {
             true => 2,
-            false => 0
+            false => 0,
         };
         const MAX_BYTES_XZ: usize = match cfg!(feature = "compress-xz") {
             true => 6,
-            false => 0
+            false => 0,
         };
         const MAX_BYTES: usize = utils::max(MAX_BYTES_FLATE, MAX_BYTES_XZ);
-        
+
         MAX_BYTES
     }
 
     /// Get the compression type from the stream.
-    /// 
+    ///
     /// # Arguments
     /// * `stream` - The stream to read from.
-    /// 
+    ///
     /// # Returns
     /// The compression type.
-    /// 
+    ///
     /// # Errors
     /// If the stream could not be read.
-    /// 
+    ///
     /// # Notes
     /// This function reads the first few bytes of the stream to determine the compression type.
     /// The default use case would probably be using [BufferCopyStreamReader] to proxy
@@ -109,13 +109,13 @@ impl CompressionType {
     /// ```
     pub fn from_stream<R: Read>(stream: R) -> Result<CompressionType> {
         const MAX_BYTES: usize = CompressionType::max_stream_peek_count();
-        
+
         if MAX_BYTES == 0 {
             return Ok(CompressionType::Null);
         }
-        
+
         let mut buffer = [0; MAX_BYTES];
-        
+
         let mut stream = stream.take(MAX_BYTES as u64);
 
         let mut num_read_sum: usize = 0;
@@ -126,30 +126,36 @@ impl CompressionType {
                 break;
             }
         }
-        
+
         #[cfg(feature = "compress-flate2")]
         if buffer[0] == 0x1F && buffer[1] == 0x8B {
             return Ok(CompressionType::Gz);
         }
-        
+
         #[cfg(feature = "compress-xz")]
-        if buffer[0] == 0xFD && buffer[1] == 0x37 && buffer[2] == 0x7A && buffer[3] == 0x58 && buffer[4] == 0x5A && buffer[5] == 0x00 {
+        if buffer[0] == 0xFD
+            && buffer[1] == 0x37
+            && buffer[2] == 0x7A
+            && buffer[3] == 0x58
+            && buffer[4] == 0x5A
+            && buffer[5] == 0x00
+        {
             return Ok(CompressionType::Xz);
         }
-        
+
         Ok(CompressionType::Null)
     }
 }
 
 impl<R: Read> BufferCopyStreamReader<R> {
     /// Create a new buffer copy stream reader with the capacity to determine the compression type.
-    /// 
+    ///
     /// # Arguments
     /// * `stream` - The stream to read from.
-    /// 
+    ///
     /// # Returns
     /// The buffer copy stream reader.
-    /// 
+    ///
     /// # See also
     /// [BufferCopyStreamReader]
     pub fn with_capacity_compression_peak(stream: R) -> BufferCopyStreamReader<R> {

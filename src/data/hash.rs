@@ -1,16 +1,15 @@
+use crate::path::FilePath;
+use crate::stages::build::intermediary_build_data::BuildFile;
+#[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
+use crate::utils;
+use const_format::concatcp;
+use serde::de::Error;
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::fmt::Display;
 use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize, Serializer};
-use serde::de::Error;
-use const_format::concatcp;
-use crate::stages::build::intermediary_build_data::BuildFile;
-use crate::path::FilePath;
-#[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
-use crate::utils;
-
 
 /// `GeneralHashType` is an enum that represents the different types of hash functions that can be used.
 ///
@@ -99,23 +98,35 @@ impl GeneralHashType {
 
 impl GeneralHashType {
     /// Returns the available hash types as a string.
-    /// 
+    ///
     /// # Returns
     /// The available hash types as a string.
-    /// 
+    ///
     /// # Examples
     /// ```
     /// use backup_deduplicator::hash::GeneralHashType;
-    /// 
+    ///
     /// let supported = GeneralHashType::supported_algorithms();
     /// println!("Supported algorithms: {}", supported);
     /// ```
     pub const fn supported_algorithms() -> &'static str {
-        const SHA2: &'static str = if cfg!(feature = "hash-sha2") { "SHA512, SHA256, " } else { "" };
-        const SHA1: &'static str = if cfg!(feature = "hash-sha1") { "SHA1, " } else { "" };
-        const XXH: &'static str = if cfg!(feature = "hash-xxh") { "XXH64, XXH32, " } else { "" };
+        const SHA2: &'static str = if cfg!(feature = "hash-sha2") {
+            "SHA512, SHA256, "
+        } else {
+            ""
+        };
+        const SHA1: &'static str = if cfg!(feature = "hash-sha1") {
+            "SHA1, "
+        } else {
+            ""
+        };
+        const XXH: &'static str = if cfg!(feature = "hash-xxh") {
+            "XXH64, XXH32, "
+        } else {
+            ""
+        };
         const NULL: &'static str = "NULL";
-        
+
         concatcp!(SHA2, SHA1, XXH, NULL)
     }
 }
@@ -125,13 +136,13 @@ impl FromStr for GeneralHashType {
     type Err = &'static str;
 
     /// Parses a string into a `GeneralHashType`.
-    /// 
+    ///
     /// # Arguments
     /// * `s` - The string to parse.
-    /// 
+    ///
     /// # Returns
     /// The `GeneralHashType` that corresponds to the string or an error.
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the string does not correspond to a `GeneralHashType`.
     /// Returns the available hash types in the error message.
@@ -155,13 +166,13 @@ impl FromStr for GeneralHashType {
 
 impl Display for GeneralHashType {
     /// Converts a `GeneralHashType` into a string.
-    /// 
+    ///
     /// # Arguments
     /// * `f` - The formatter to write to.
-    /// 
+    ///
     /// # Returns
     /// A result indicating whether the operation was successful.
-    /// 
+    ///
     /// # Errors
     /// Never
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -257,25 +268,35 @@ impl Display for GeneralHash {
 
         match self {
             #[cfg(feature = "hash-sha2")]
-            GeneralHash::SHA512(data) => for byte in data {
-                hex.push_str(&format!("{:02x}", byte));
-            },
+            GeneralHash::SHA512(data) => {
+                for byte in data {
+                    hex.push_str(&format!("{:02x}", byte));
+                }
+            }
             #[cfg(feature = "hash-sha2")]
-            GeneralHash::SHA256(data) => for byte in data {
-                hex.push_str(&format!("{:02x}", byte));
-            },
+            GeneralHash::SHA256(data) => {
+                for byte in data {
+                    hex.push_str(&format!("{:02x}", byte));
+                }
+            }
             #[cfg(feature = "hash-sha1")]
-            GeneralHash::SHA1(data) => for byte in data {
-                hex.push_str(&format!("{:02x}", byte));
-            },
+            GeneralHash::SHA1(data) => {
+                for byte in data {
+                    hex.push_str(&format!("{:02x}", byte));
+                }
+            }
             #[cfg(feature = "hash-xxh")]
-            GeneralHash::XXH64(data) => for byte in data {
-                hex.push_str(&format!("{:02x}", byte));
-            },
+            GeneralHash::XXH64(data) => {
+                for byte in data {
+                    hex.push_str(&format!("{:02x}", byte));
+                }
+            }
             #[cfg(feature = "hash-xxh")]
-            GeneralHash::XXH32(data) => for byte in data {
-                hex.push_str(&format!("{:02x}", byte));
-            },
+            GeneralHash::XXH32(data) => {
+                for byte in data {
+                    hex.push_str(&format!("{:02x}", byte));
+                }
+            }
             GeneralHash::NULL => {
                 hex.push_str("00");
             }
@@ -286,7 +307,10 @@ impl Display for GeneralHash {
 }
 
 impl Serialize for GeneralHash {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(self.to_string().as_str())
     }
 }
@@ -296,30 +320,31 @@ impl FromStr for GeneralHash {
     type Err = &'static str;
 
     /// Parses a string into a `GeneralHash`.
-    /// 
+    ///
     /// # Arguments
     /// * `hex` - The string to parse, in the format `hash_type:hash_data (hex)`.
-    /// 
+    ///
     /// # Returns
     /// The `GeneralHash` that corresponds to the string or an error.
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the string does not correspond to a `GeneralHash`.
     /// * If the hash type is not recognized.
     /// * If the hash data is not valid (wrong length or non-hex string).
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
         let mut iter = hex.split(':');
-        let hash_type = GeneralHashType::from_str(iter.next().ok_or_else(|| "No hash type")?).map_err(|_| "Failed to parse hash type")?;
-        
+        let hash_type = GeneralHashType::from_str(iter.next().ok_or_else(|| "No hash type")?)
+            .map_err(|_| "Failed to parse hash type")?;
+
         #[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
-        let data = match hash_type { 
+        let data = match hash_type {
             GeneralHashType::NULL => Vec::new(),
             _ => {
                 let data = iter.next().ok_or_else(|| "No hash data")?;
                 utils::decode_hex(data).map_err(|_| "Failed to decode hash data")?
             }
         };
-        
+
         let mut hash = GeneralHash::from_type(hash_type);
         match &mut hash {
             #[cfg(feature = "hash-sha2")]
@@ -328,35 +353,35 @@ impl FromStr for GeneralHash {
                     return Err("Invalid data length");
                 }
                 target_data.copy_from_slice(&data);
-            },
+            }
             #[cfg(feature = "hash-sha2")]
             GeneralHash::SHA256(target_data) => {
                 if data.len() != 32 {
                     return Err("Invalid data length");
                 }
                 target_data.copy_from_slice(&data);
-            },
+            }
             #[cfg(feature = "hash-sha1")]
             GeneralHash::SHA1(target_data) => {
                 if data.len() != 20 {
                     return Err("Invalid data length");
                 }
                 target_data.copy_from_slice(&data);
-            },
+            }
             #[cfg(feature = "hash-xxh")]
             GeneralHash::XXH64(target_data) => {
                 if data.len() != 8 {
                     return Err("Invalid data length");
                 }
                 target_data.copy_from_slice(&data);
-            },
+            }
             #[cfg(feature = "hash-xxh")]
             GeneralHash::XXH32(target_data) => {
                 if data.len() != 4 {
                     return Err("Invalid data length");
                 }
                 target_data.copy_from_slice(&data);
-            },
+            }
             GeneralHash::NULL => {}
         }
         Ok(hash)
@@ -365,18 +390,19 @@ impl FromStr for GeneralHash {
 
 impl<'de> Deserialize<'de> for GeneralHash {
     /// Deserializes a `GeneralHash` from a string.
-    /// 
+    ///
     /// # Arguments
     /// * `deserializer` - The deserializer to use.
-    /// 
+    ///
     /// # Returns
     /// The deserialized `GeneralHash`.
-    /// 
+    ///
     /// # Errors
     /// If the string could not be deserialized.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de> {
+    where
+        D: serde::Deserializer<'de>,
+    {
         let hex = String::deserialize(deserializer)?;
         GeneralHash::from_str(hex.as_str()).map_err(D::Error::custom)
     }
@@ -405,23 +431,33 @@ impl GeneralHash {
 
     #[cfg(feature = "hash-sha2")]
     /// Returns a new instance of a SHA512 hash value.
-    pub fn new_sha512() -> Self { Self::from_type(GeneralHashType::SHA512) }
-    
+    pub fn new_sha512() -> Self {
+        Self::from_type(GeneralHashType::SHA512)
+    }
+
     #[cfg(feature = "hash-sha2")]
     /// Returns a new instance of a SHA256 hash value.
-    pub fn new_sha256() -> Self { Self::from_type(GeneralHashType::SHA256) }
-    
+    pub fn new_sha256() -> Self {
+        Self::from_type(GeneralHashType::SHA256)
+    }
+
     #[cfg(feature = "hash-sha1")]
     /// Returns a new instance of a SHA1 hash value.
-    pub fn new_sha1() -> Self { Self::from_type(GeneralHashType::SHA1) }
-    
+    pub fn new_sha1() -> Self {
+        Self::from_type(GeneralHashType::SHA1)
+    }
+
     #[cfg(feature = "hash-xxh")]
     /// Returns a new instance of a XXH64 hash value.
-    pub fn new_xxh64() -> Self { Self::from_type(GeneralHashType::XXH64) }
-    
+    pub fn new_xxh64() -> Self {
+        Self::from_type(GeneralHashType::XXH64)
+    }
+
     #[cfg(feature = "hash-xxh")]
     /// Returns a new instance of a XXH32 hash value.
-    pub fn new_xxh32() -> Self { Self::from_type(GeneralHashType::XXH32) }
+    pub fn new_xxh32() -> Self {
+        Self::from_type(GeneralHashType::XXH32)
+    }
 
     /// Returns the type of the hash function used.
     ///
@@ -435,12 +471,12 @@ impl GeneralHash {
     /// #[cfg(feature = "hash-sha2")]
     /// {
     ///    let hash = GeneralHash::new_sha256();
-    // 
+    //
     //     let m = match hash.hash_type() {
     //         GeneralHashType::SHA256 => true,
     //         _ => false,
     //     };
-    // 
+    //
     //     assert!(m);
     /// }
     /// ```
@@ -508,8 +544,9 @@ impl GeneralHash {
     /// # Errors
     /// Returns an error if the data could not be read.
     pub fn hash_file<T>(&mut self, mut reader: T) -> anyhow::Result<u64>
-        where T: std::io::Read {
-
+    where
+        T: std::io::Read,
+    {
         let mut hasher = self.hasher();
         let mut buffer = [0; 4096];
         let mut content_size = 0;
@@ -538,7 +575,10 @@ impl GeneralHash {
     ///
     /// # Errors
     /// Does not return an error. Might return an error in the future.
-    pub fn hash_directory<'a>(&mut self, children: impl Iterator<Item = &'a BuildFile>) -> anyhow::Result<u64> {
+    pub fn hash_directory<'a>(
+        &mut self,
+        children: impl Iterator<Item = &'a BuildFile>,
+    ) -> anyhow::Result<u64> {
         let mut hasher = self.hasher();
 
         let mut content_size = 0;
@@ -614,7 +654,9 @@ pub trait GeneralHasher {
     ///
     /// # Returns
     /// A new instance of a `GeneralHasher`.
-    fn new() -> Self where Self: Sized;
+    fn new() -> Self
+    where
+        Self: Sized;
 
     /// Updates the hash value with the specified data.
     ///
@@ -630,6 +672,8 @@ pub trait GeneralHasher {
     fn finalize(self: Box<Self>) -> GeneralHash;
 }
 
+/// `GeneralHasher` implementation for the NULL hash function
+mod null;
 #[cfg(feature = "hash-sha1")]
 /// `GeneralHasher` implementation for the SHA1 crate
 mod sha1;
@@ -639,18 +683,15 @@ mod sha2;
 #[cfg(feature = "hash-xxh")]
 /// `GeneralHasher` implementation for the XXH crate
 mod xxh;
-/// `GeneralHasher` implementation for the NULL hash function
-mod null;
-
 
 /// `HashingStream` is a wrapper around a `std::io::Read` that computes
 /// a hash value of the data that is read while proxying the data.
-/// 
+///
 /// # Examples
 /// ```
 /// # use std::io::Read;
 /// # use backup_deduplicator::hash::{GeneralHashType, HashingStream};
-/// 
+///
 /// let data = b"Hello\n, world!";
 /// let mut stream = HashingStream::<&[u8]>::new(data.as_ref(), GeneralHashType::SHA256);
 /// let mut buffer = [0; 6];
@@ -668,11 +709,11 @@ pub struct HashingStream<R: Read> {
 
 impl<R: Read> HashingStream<R> {
     /// Creates a new instance of a `HashingStream`.
-    /// 
+    ///
     /// # Arguments
     /// * `stream` - The stream to wrap.
     /// * `hash` - The type of the hash function to use.
-    /// 
+    ///
     /// # Returns
     /// A new instance of a `HashingStream`.
     pub fn new(stream: R, hash: GeneralHashType) -> Self {
@@ -682,17 +723,17 @@ impl<R: Read> HashingStream<R> {
             bytes_processed: 0,
         }
     }
-    
+
     /// Returns the number of bytes that were read.
-    /// 
+    ///
     /// # Returns
     /// The number of bytes that were read.
     pub fn bytes_processed(&self) -> u64 {
         self.bytes_processed
     }
-    
+
     /// Consumes this instance of a `HashingStream` and returns the hash value.
-    /// 
+    ///
     /// # Returns
     /// The hash value of the data that was read.
     pub fn hash(self) -> GeneralHash {
