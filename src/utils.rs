@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{Read, SeekFrom, Write};
 use std::ops::Deref;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -164,6 +164,12 @@ impl std::io::Read for NullReader {
     /// Never
     fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
         Ok(0)
+    }
+}
+
+impl std::io::Seek for NullReader {
+    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
+        Err(std::io::Error::new(std::io::ErrorKind::Other, "Null reader does not support seeking"))
     }
 }
 

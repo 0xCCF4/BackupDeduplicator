@@ -104,8 +104,8 @@ impl CompressionType {
     /// let decompressed = compression_type.open(stream.try_into_inner().unwrap());
     ///
     /// let mut archive = ArchiveType::Tar.open(decompressed).unwrap();
-    /// let entry = archive.next().unwrap();
-    /// assert_eq!(entry.unwrap().path.to_str().unwrap(), "tar_root/");
+    /// let entry = archive.entries().unwrap().next().unwrap().unwrap();
+    /// assert_eq!(entry.path().unwrap().to_str().unwrap(), "tar_root/");
     /// ```
     pub fn from_stream<R: Read>(stream: R) -> Result<CompressionType> {
         const MAX_BYTES: usize = CompressionType::max_stream_peek_count();

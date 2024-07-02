@@ -46,16 +46,14 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
         None => {}
     }
 
-    let mut hasher;
-    let stream = match File::open(&path) {
+    let mut hasher= match File::open(&path) {
         Err(err) => {
             error!("Error while opening file {:?}: {}", path, err);
             worker_publish_result_or_trigger_parent(id, false, worker_create_error(job.target_path.clone(), modified, size), job, result_publish, job_publish, arg);
             return;
         },
         Ok(stream) => {
-            hasher = HashingStream::new(stream, arg.hash_type);
-            &mut hasher
+            HashingStream::new(stream, arg.hash_type)
         }
     };
 
@@ -157,11 +155,9 @@ pub fn worker_run_file(path: PathBuf, modified: u64, size: u64, id: usize, job: 
 ///
 /// # Error
 /// If the file could not be opened.
-pub fn is_archive<R: Read>(stream: R) -> anyhow::Result<Option<(CompressionType, ArchiveType)>> {
-    let stream = BufferCopyStreamReader::with_capacity_compression_peak(stream);
+pub fn is_archive<R: Read>(stream: BufferCopyStreamReader<R>) -> anyhow::Result<Option<(CompressionType, ArchiveType)>> {
     let compression_type = CompressionType::from_stream(stream.child()).map_err(|e| anyhow!("Unable to open compressed stream: {}", e))?;
-
-    let stream = stream.try_into_inner().map_err(|e| anyhow!("Unable to open compressed stream: {}", e))?;
+    
     let stream = compression_type.open(stream);
 
     let stream = BufferCopyStreamReader::with_capacity_archive_peak(stream);
@@ -170,8 +166,6 @@ pub fn is_archive<R: Read>(stream: R) -> anyhow::Result<Option<(CompressionType,
 
     match archive_type {
         Some(archive_type) => {
-            let stream = stream.try_into_inner().map_err(|e| anyhow!("Unable to open archive stream: {}", e))?;
-
             Ok(Some((compression_type, archive_type)))
         },
         None => {

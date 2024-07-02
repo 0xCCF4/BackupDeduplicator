@@ -31,6 +31,8 @@ sha2 = {  version = "0.11.0-pre.3", optional = true }
 flate2 = { version = "1.0.30", optional = true }
 xz2 = { version = "0.1.7", optional = true }
 tar = {  version = "0.4.40", optional = true }
+zip = { git = "https://github.com/0xCCF4/zip2", branch = "feature-read-from-seekable-stream", optional = true, features = ["chrono"] }
+chrono = { version = "0.4.38", optional = true }
 
 [features]
 hash-sha1 = ["dep:sha1"]
@@ -39,4 +41,5 @@ hash-xxh = ["dep:xxhash-rust"]
 compress-flate2 = ["dep:flate2"]
 compress-xz = ["dep:xz2"]
 archive-tar = ["dep:tar"]
-default = ["hash-sha1", "hash-sha2", "hash-xxh", "compress-flate2", "compress-xz", "archive-tar"]
+archive-zip = ["dep:zip", "dep:chrono"]
+default = ["hash-sha1", "hash-sha2", "hash-xxh", "compress-flate2", "compress-xz", "archive-tar", "archive-zip"]

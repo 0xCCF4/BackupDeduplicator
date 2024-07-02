@@ -651,14 +651,14 @@ mod null;
 /// # use std::io::Read;
 /// # use backup_deduplicator::hash::{GeneralHashType, HashingStream};
 /// 
-/// let data = b"Hello, world!";
-/// let mut stream = HashingStream::new(data.as_ref(), GeneralHashType::SHA256);
-/// let mut buffer = [0; 5];
+/// let data = b"Hello\n, world!";
+/// let mut stream = HashingStream::<&[u8]>::new(data.as_ref(), GeneralHashType::SHA256);
+/// let mut buffer = [0; 6];
 /// let bytes_read = stream.read(&mut buffer).unwrap();
-/// 
-/// assert_eq!(bytes_read, 5);
-/// assert_eq!(stream, vec!['H', 'e', 'l', 'l', 'o']);
-/// assert_eq!(stream.hash().to_string(), "SHA256:xx");
+///
+/// assert_eq!(bytes_read, 6);
+/// assert_eq!(&buffer, b"Hello\n");
+/// assert_eq!(stream.hash().to_string(), "SHA256:66a045b452102c59d840ec097d59d9467e13a3f34f6494e539ffd32c1bb35f18");
 /// ```
 pub struct HashingStream<R: Read> {
     stream: R,

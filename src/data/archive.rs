@@ -1,20 +1,19 @@
-use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io::Read;
-use std::ops::DerefMut;
-use std::path::PathBuf;
-use std::rc::Rc;
+use std::path::{PathBuf};
 use serde::{Deserialize, Serialize};
-use anyhow::{Result};
-use crate::compression::CompressionType;
+use anyhow::{anyhow, Result};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use crate::copy_stream::BufferCopyStreamReader;
 use crate::utils;
 
 /// The type of archive.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash)]
 pub enum ArchiveType {
     #[cfg(feature = "archive-tar")]
     Tar,
+    #[cfg(feature = "archive-zip")]
+    Zip,
 }
 
 impl ArchiveType {
@@ -28,11 +27,8 @@ impl ArchiveType {
     /// 
     /// # Errors
     /// If the archive could not be opened.
-    pub fn open<'a, 'b: 'a, R: Read + 'b>(&self, stream: R) -> Result<Box<dyn ArchiveIterator<'b> + 'a>> {
-        match self {
-            #[cfg(feature = "archive-tar")]
-            ArchiveType::Tar => Ok(Box::new(tar::TarArchiveIterator::new(stream)?) as Box<dyn ArchiveIterator + 'a>),
-        }
+    pub fn open<R: Read>(&self, stream: R) -> Result<GeneralArchive<R>> {
+        GeneralArchive::new(self.clone(), stream)
     }
     
     /// Get the archive type from the file extension.
@@ -46,6 +42,8 @@ impl ArchiveType {
         match extension {
             #[cfg(feature = "archive-tar")]
             "tar" => Some(ArchiveType::Tar),
+            #[cfg(feature = "archive-zip")]
+            "zip" => Some(ArchiveType::Zip),
             _ => None,
         }
     }
@@ -59,7 +57,11 @@ impl ArchiveType {
             true => 257 + 8,
             false => 0
         };
-        const MAX_BYTES: usize = utils::max(MAX_BYTES_TAR, 0);
+        const MAX_BYTES_ZIP: usize = match cfg!(feature = "archive-zip") {
+            true => 4,
+            false => 0
+        };
+        const MAX_BYTES: usize = utils::max(MAX_BYTES_TAR, MAX_BYTES_ZIP);
 
         MAX_BYTES
     }
@@ -87,6 +89,17 @@ impl ArchiveType {
             num_read_sum += num_read;
             if num_read <= 0 {
                 break;
+            }
+        }
+
+        #[cfg(feature = "archive-zip")]
+        {
+            if num_read_sum >= 4 &&
+                buffer[0] == 0x50 &&
+                buffer[1] == 0x4b &&
+                buffer[2] == 0x03 &&
+                buffer[3] == 0x04 {
+                return Ok(Some(ArchiveType::Zip));
             }
         }
 
@@ -133,21 +146,108 @@ impl ArchiveType {
     }
 }
 
-/// An entry in an archive.
-/// 
-/// # Fields
-/// * `path` - The path of the entry.
-/// * `size` - The size of the entry.
-/// * `modified` - The last modified time of the entry.
-/// * `stream` - The stream of the entry.
-pub struct ArchiveEntry {
-    pub path: PathBuf,
-    pub size: u64,
-    pub modified: u64,
-    stream: Box<dyn Read>,
+pub enum GeneralArchive<R: Read> {
+    #[cfg(feature = "archive-tar")]
+    Tar(tar::TarArchive<R>),
+    #[cfg(feature = "archive-zip")]
+    Zip(zip::ZipArchive<R>),
 }
 
-impl Read for ArchiveEntry {
+impl<R: Read> GeneralArchive<R> {
+    pub fn new(archive_type: ArchiveType, stream: R) -> Result<Self> {
+        Ok(match archive_type { 
+            #[cfg(feature = "archive-tar")]
+            ArchiveType::Tar => Self::Tar(tar::TarArchive::new(stream)?),
+            #[cfg(feature = "archive-zip")]
+            ArchiveType::Zip => Self::Zip(zip::ZipArchive::new(stream.into())?),
+        })
+    }
+    
+    pub fn entries(&mut self) -> Result<ArchiveIterator<R>> {
+        Ok(match self {
+            #[cfg(feature = "archive-tar")]
+            Self::Tar(archive) => ArchiveIterator::Tar(archive.entries()?),
+            #[cfg(feature = "archive-zip")]
+            Self::Zip(archive) => ArchiveIterator::Zip(archive.entries()?),
+        })
+    }
+}
+
+pub enum ArchiveIterator<'a, R: Read> {
+    #[cfg(feature = "archive-tar")]
+    Tar(tar::TarArchiveIterator<'a, R>),
+    #[cfg(feature = "archive-zip")]
+    Zip(zip::ZipArchiveIterator<'a, R>),
+}
+
+impl<'a, R: Read> Iterator for ArchiveIterator<'a, R> {
+    type Item = Result<ArchiveEntry<'a, R>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            #[cfg(feature = "archive-tar")]
+            Self::Tar(iterator) => iterator.next(),
+            #[cfg(feature = "archive-zip")]
+            Self::Zip(iterator) => iterator.next(),
+        }
+    }
+}
+
+pub enum ArchiveEntry<'a, R: Read> {
+    #[cfg(feature = "archive-tar")]
+    TarEntry(tar::TarEntryRaw<'a, R>),
+    #[cfg(feature = "archive-zip")]
+    ZipEntry(zip::ZipEntryRaw<'a>),
+}
+
+impl<'a, R: Read> ArchiveEntry<'a, R> {
+    pub fn path(&self) -> Result<PathBuf> {
+        Ok(match self {
+            #[cfg(feature = "archive-tar")]
+            Self::TarEntry(entry) => entry.path()?.into(),
+            #[cfg(feature = "archive-zip")]
+            Self::ZipEntry(entry) => entry.enclosed_name().ok_or_else(|| anyhow!("Failed to parse zip entry name. It contains illegal parts {}", entry.name()))?
+        })
+    }
+    
+    pub fn size(&self) -> u64 {
+        match self {
+            #[cfg(feature = "archive-tar")]
+            Self::TarEntry(entry) => entry.size(),
+            #[cfg(feature = "archive-zip")]
+            Self::ZipEntry(entry) => entry.size(),
+        }
+    }
+    
+    pub fn modified(&self) -> u64 {
+        match self {
+            #[cfg(feature = "archive-tar")]
+            Self::TarEntry(entry) => entry.header().mtime().unwrap_or(0),
+            #[cfg(feature = "archive-zip")]
+            Self::ZipEntry(entry) => entry.last_modified().map(|datetime| {
+                    let ymd = NaiveDate::from_ymd_opt(datetime.year() as i32, datetime.month() as u32, datetime.day() as u32);
+                    let hms = NaiveTime::from_hms_opt(datetime.hour() as u32, datetime.minute() as u32, datetime.second() as u32);
+                
+                    if ymd.is_none() || hms.is_none() {
+                        NaiveDateTime::UNIX_EPOCH
+                    } else {
+                        NaiveDateTime::new(ymd.unwrap(), hms.unwrap())
+                    }
+                })
+                .map(|naive_datetime| naive_datetime.signed_duration_since(NaiveDateTime::UNIX_EPOCH).num_seconds() as u64).unwrap_or(0)
+        }
+    }
+    
+    pub fn stream(&mut self) -> Box<&mut dyn Read> {
+        match self {
+            #[cfg(feature = "archive-tar")]
+            Self::TarEntry(entry) => Box::new(entry),
+            #[cfg(feature = "archive-zip")]
+            Self::ZipEntry(entry) => Box::new(entry),
+        }
+    }
+}
+
+impl<'a, R: Read> Read for ArchiveEntry<'a, R> {
     /// Read from the archive entry.
     /// 
     /// # Arguments
@@ -159,20 +259,25 @@ impl Read for ArchiveEntry {
     /// # Errors
     /// If the entry could not be read.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        // Borrow_mut should never panic, since there exists only one ArchiveEntry with a reference
-        // to the stream at a time.
-        self.stream.read(buf)
+        match self { 
+            #[cfg(feature = "archive-tar")]
+            Self::TarEntry(entry) => entry.read(buf),
+            #[cfg(feature = "archive-zip")]
+            Self::ZipEntry(entry) => entry.read(buf),
+        }
     }
 }
 
-impl<'a> Debug for ArchiveEntry {
+impl<'a, R: Read> Debug for ArchiveEntry<'a, R> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ArchiveEntry {{ path: {:?}, size: {}, modified: {} }}", self.path, self.size, self.modified)
+        write!(f, "ArchiveEntry {{ path: {:?}, size: {}, modified: {} }}", self.path(), self.size(), self.modified())
     }
 }
 
 #[cfg(feature = "archive-tar")]
 pub mod tar;
+#[cfg(feature = "archive-zip")]
+pub mod zip;
 
 impl<R: Read> BufferCopyStreamReader<R> {
     /// Create a new buffer copy stream reader with the capacity to determine the compression type.
@@ -190,7 +295,3 @@ impl<R: Read> BufferCopyStreamReader<R> {
     }
 }
 
-trait ArchiveIterator<'a> {
-    fn next(&mut self) -> Option<Result<()>>;
-    fn current_entry(&mut self) -> Option<&mut ArchiveEntry>;
-}

@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::io::Read;
+use std::cmp::{min};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::rc::Rc;
 use anyhow::Result;
 
@@ -44,6 +45,7 @@ use anyhow::Result;
 pub struct BufferCopyStreamReader<R: Read> {
     reader: Rc<RefCell<R>>,
     buffer: Rc<RefCell<Vec<u8>>>,
+    index: usize,
 }
 
 impl<R: Read> BufferCopyStreamReader<R> {
@@ -58,6 +60,7 @@ impl<R: Read> BufferCopyStreamReader<R> {
         BufferCopyStreamReader {
             reader: Rc::new(RefCell::new(reader)),
             buffer: Rc::new(RefCell::new(Vec::new())),
+            index: 0,
         }
     }
 
@@ -74,6 +77,7 @@ impl<R: Read> BufferCopyStreamReader<R> {
         BufferCopyStreamReader {
             reader: Rc::new(RefCell::new(reader)),
             buffer: Rc::new(RefCell::new(Vec::with_capacity(capacity))),
+            index: 0,
         }
     }
     
@@ -108,61 +112,80 @@ impl<R: Read> BufferCopyStreamReader<R> {
     ///
     /// # Returns
     /// A new [BufferCopyStreamReaderChild] instance.
-    pub fn child(&self) -> BufferCopyStreamReaderChild<R> {
-        BufferCopyStreamReaderChild::new(Rc::clone(&self.buffer), Rc::clone(&self.reader))
-    }
-}
-
-/// A child stream that reads from the [BufferCopyStreamReader] while buffering the data.
-///
-/// # Example
-/// See [BufferCopyStreamReader] for an example.
-pub struct BufferCopyStreamReaderChild<R: Read> {
-    buffer: Rc<RefCell<Vec<u8>>>,
-    reader: Rc<RefCell<R>>,
-    index: usize,
-}
-
-impl<R: Read> BufferCopyStreamReaderChild<R> {
-    fn new(buffer: Rc<RefCell<Vec<u8>>>, reader: Rc<RefCell<R>>) -> Self {
-        BufferCopyStreamReaderChild {
-            buffer,
-            reader,
-            index: 0,
+    pub fn child(&self) -> BufferCopyStreamReader<R> {
+        BufferCopyStreamReader {
+            reader: Rc::clone(&self.reader),
+            buffer: Rc::clone(&self.buffer),
+            index: self.index,
         }
     }
-
+    
     /// Buffer the given amount of bytes from the underlying reader.
     ///
     /// # Arguments
     /// * `length` - The amount of bytes to buffer.
+    /// * `read_buffer` - A buffer used for temporary storage. If none method will allocate own buffer.
     ///
     /// # Returns
     /// The amount of bytes read.
     ///
     /// # Errors
     /// If the underlying reader could not be read.
-    pub fn buffer_bytes(&self, length: usize) -> std::io::Result<usize> {
-        let mut buffer = self.buffer.borrow_mut();
-        let mut reader = self.reader.borrow_mut();
+    pub fn buffer_bytes(&self, length: usize, read_buffer: Option<&mut Vec<u8>>) -> std::io::Result<usize> {
+        fn inner<R: Read>(this: &BufferCopyStreamReader<R>, length: usize, read_buffer: &mut Vec<u8>) -> std::io::Result<usize> {
+            let mut buffer = this.buffer.borrow_mut();
+            let mut reader = this.reader.borrow_mut();
 
-        let mut tmp_buffer = Vec::with_capacity(length);
-        for _ in 0..length {
-            tmp_buffer.push(0);
+            while read_buffer.len() < length {
+                read_buffer.push(0);
+            }
+
+            let read_result = reader.read(read_buffer)?;
+
+            buffer.reserve(read_result);
+            for i in 0..read_result {
+                buffer.push(read_buffer[i]);
+            }
+
+            Ok(read_result)
         }
 
-        let read_result = reader.read(&mut tmp_buffer)?;
-
-        buffer.reserve(read_result);
-        for i in 0..read_result {
-            buffer.push(tmp_buffer[i]);
+        match read_buffer {
+            Some(read_buffer) => inner(self, length, read_buffer),
+            None => {
+                let mut read_buffer: Vec<u8> = Vec::with_capacity(length);
+                inner(self, length, &mut read_buffer)
+            }
         }
+    }
 
-        Ok(read_result)
+    pub fn buffer_bytes_chunked(&self, length: usize, chunk_size: usize) -> std::io::Result<usize> {
+        let mut allocated = 0;
+
+        // only allocate temporary buffer once, then reuse
+        let mut read_buffer = Vec::with_capacity(min(length, chunk_size));
+
+        loop {
+            let bytes_to_read = min(length - allocated, chunk_size);
+            
+            // required for streams that do not have an EOF
+            if bytes_to_read <= 0 {
+                return Ok(allocated);
+            }
+            
+            match self.buffer_bytes(bytes_to_read, Some(&mut read_buffer))? {
+                0 => return Ok(allocated),
+                bytes_read => allocated += bytes_read,
+            }
+        }
+    }
+
+    pub fn buffer_bytes_chunked_default(&self, length: usize) -> std::io::Result<usize> {
+        self.buffer_bytes_chunked(length, 4096)
     }
 }
 
-impl<R: Read> Read for BufferCopyStreamReaderChild<R> {
+impl<R: Read> Read for BufferCopyStreamReader<R> {
     /// Read bytes from the buffer by silently buffering the data from the underlying reader.
     ///
     /// # Arguments
@@ -180,7 +203,7 @@ impl<R: Read> Read for BufferCopyStreamReaderChild<R> {
         let requested_bytes = std::cmp::max(0, buf.len() - buffered_bytes);
         
         drop(buffer);
-        self.buffer_bytes(requested_bytes)?;
+        self.buffer_bytes_chunked_default(requested_bytes)?;
         let buffer = self.buffer.borrow();
 
         let bytes_to_copy = std::cmp::min(buffer.len() - self.index, buf.len());
@@ -189,6 +212,69 @@ impl<R: Read> Read for BufferCopyStreamReaderChild<R> {
         buf[..bytes_to_copy].copy_from_slice(&buffer[self.index..self.index + bytes_to_copy]);
         
         Ok(bytes_to_copy)
+    }
+}
+
+impl<R: Read> Seek for BufferCopyStreamReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let target_index = match pos {
+            SeekFrom::Start(requested_position) => {
+                // get last index
+                let buffer = self.buffer.borrow();
+                let buffer_length = buffer.len() as u64;
+                drop(buffer);
+
+                // only check upper bound, since unsigned parameter
+                if requested_position > buffer_length {
+                    self.buffer_bytes_chunked_default((requested_position - buffer_length) as usize)?;
+                }
+
+                requested_position
+            },
+            SeekFrom::End(requested_position) => {
+                // buffer all bytes till end
+                loop {
+                    match self.buffer_bytes_chunked_default(usize::MAX) {
+                        Err(e) => return Err(e),
+                        Ok(0) => break,
+                        Ok(_) => continue,
+                    }
+                };
+
+                // get last index
+                let buffer = self.buffer.borrow();
+                let buffer_length = buffer.len() as u64;
+
+                // check upper and lower bound
+                if requested_position > 0 {
+                    return Err(std::io::Error::new(ErrorKind::Other, "Can not seek beyond end"));
+                }
+
+                if (-requested_position as u64) > (buffer_length as u64) {
+                    return Err(std::io::Error::new(ErrorKind::Other, "can not seek beyond zero"));
+                }
+
+                buffer_length - ( -requested_position as u64)
+            }
+            SeekFrom::Current(requested_position) => {
+                return if requested_position >= 0 {
+                    if (self.index as u64).checked_add(requested_position as u64).is_none() {
+                        return Err(std::io::Error::new(ErrorKind::Other, "Can not seek beyond overflow."));
+                    }
+
+                    self.seek(SeekFrom::Start(self.index as u64 + requested_position as u64))
+                } else {
+                    if (self.index as u64) < (-requested_position as u64) {
+                        return Err(std::io::Error::new(ErrorKind::Other, "can not seek beyond zero"));
+                    }
+
+                    self.seek(SeekFrom::Start(self.index as u64 - (-requested_position as u64)))
+                }
+            }
+        };
+        
+        self.index = target_index as usize;
+        Ok(self.index as u64)
     }
 }
 
@@ -216,6 +302,22 @@ impl<R: Read> BufferFirstContinueReader<R> {
             reader,
             buffer,
             index: 0,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn with_index(reader: R, mut buffer: Vec<u8>, index: usize) -> BufferFirstContinueReader<R> {
+        let index = if index >= buffer.len() {
+            buffer.clear();
+            buffer.shrink_to_fit();
+            0
+        } else {
+            index
+        };
+        BufferFirstContinueReader {
+            reader,
+            buffer,
+            index,
         }
     }
 
@@ -275,6 +377,7 @@ impl<R: Read> Read for BufferFirstContinueReader<R> {
         if self.buffer_empty() {
             self.index = 0;
             self.buffer.clear();
+            self.buffer.shrink_to_fit();
         }
 
         if requested_bytes > 0 {
@@ -283,5 +386,11 @@ impl<R: Read> Read for BufferFirstContinueReader<R> {
         } else {
             Ok(buffered_bytes)
         }
+    }
+}
+
+impl<T: Read> From<T> for BufferCopyStreamReader<T> {
+    fn from(reader: T) -> Self {
+        BufferCopyStreamReader::new(reader)
     }
 }

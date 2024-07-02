@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::PathBuf;
 use anyhow::{anyhow, Result};
-use log::{trace};
+use log::{error, trace};
 use crate::archive::{ArchiveEntry, ArchiveType};
 use crate::path::FilePath;
 use crate::stages::build::cmd::worker::WorkerArgument;
@@ -19,6 +19,15 @@ pub fn worker_run_archive<R: Read>(input: R, path: &PathBuf, archive_type: Archi
     };
     
     let mut entries = Vec::new();
+    
+    // todo remove placeholder
+    entries.push(
+        BuildFile::Other(BuildOtherInformation {
+            path: context.path.child("test-placeholder.txt"),
+            modified: 0,
+            content_size: 0,
+        })
+    );
 
     /* for entry in archive {
         let entry = entry.map_err(|err| {
@@ -38,13 +47,21 @@ struct Context {
     path: FilePath,
 }
 
-fn worker_run_entry(entry: ArchiveEntry, context: &mut Context) -> BuildFile {
-    trace!("[{}] Processing archive entry: {:?}", context.id, entry.path);
+#[allow(dead_code)]
+fn worker_run_entry<'a, R: Read>(entry: ArchiveEntry<'a, R>, context: &mut Context) -> BuildFile {
+    let path = match entry.path() {
+        Ok(path) => path,
+        Err(err) => {
+            error!("[{}] Error while reading archive entry path: {}", context.id, err);
+            panic!("TODO"); // TODO remove
+        },
+    };
+    trace!("[{}] Processing archive entry: {:?}", context.id, path);
     
     // todo placeholder
     BuildFile::Other(BuildOtherInformation {
-        path: context.path.child(entry.path),
-        modified: entry.modified,
+        path: context.path.child(path),
+        modified: entry.modified(),
         content_size: 0,
     })
     
