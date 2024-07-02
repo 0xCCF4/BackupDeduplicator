@@ -53,15 +53,21 @@ use std::str::FromStr;
 #[derive(Debug, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum GeneralHashType {
     #[cfg(feature = "hash-sha2")]
+    /// A SHA512 hash function.
     SHA512,
     #[cfg(feature = "hash-sha2")]
+    /// A SHA256 hash function.
     SHA256,
     #[cfg(feature = "hash-sha1")]
+    /// A SHA1 hash function.
     SHA1,
     #[cfg(feature = "hash-xxh")]
+    /// A XXH64 hash function.
     XXH64,
     #[cfg(feature = "hash-xxh")]
+    /// A XXH32 hash function.
     XXH32,
+    /// A NULL hash function. NULL hash values are always equal.
     NULL,
 }
 
@@ -234,15 +240,21 @@ impl Display for GeneralHashType {
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd)]
 pub enum GeneralHash {
     #[cfg(feature = "hash-sha2")]
+    /// A SHA512 hash value.
     SHA512([u8; 64]),
     #[cfg(feature = "hash-sha2")]
+    /// A SHA256 hash value.
     SHA256([u8; 32]),
     #[cfg(feature = "hash-sha1")]
+    /// A SHA1 hash value.
     SHA1([u8; 20]),
     #[cfg(feature = "hash-xxh")]
+    /// A XXH64 hash value.
     XXH64([u8; 8]),
     #[cfg(feature = "hash-xxh")]
+    /// A XXH32 hash value.
     XXH32([u8; 4]),
+    /// A NULL hash value. NULL hash values are always equal.
     NULL,
 }
 

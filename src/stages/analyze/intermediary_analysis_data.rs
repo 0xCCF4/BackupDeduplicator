@@ -7,9 +7,13 @@ use std::sync::{Arc, Mutex};
 /// The result of the analysis worker.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AnalysisFile {
+    /// A file.
     File(AnalysisFileInformation),
+    /// A directory.
     Directory(AnalysisDirectoryInformation),
+    /// A symlink.
     Symlink(AnalysisSymlinkInformation),
+    /// Other file type.
     Other(AnalysisOtherInformation),
 }
 
@@ -49,8 +53,11 @@ impl AnalysisFile {
 /// * `parent` - The parent of the file.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisFileInformation {
+    /// The path of the file.
     pub path: FilePath,
+    /// The hash of the file content.
     pub content_hash: GeneralHash,
+    /// The parent of the file.
     pub parent: Mutex<Option<Weak<AnalysisFile>>>,
 }
 
@@ -63,9 +70,13 @@ pub struct AnalysisFileInformation {
 /// * `parent` - The parent of the directory.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisDirectoryInformation {
+    /// The path of the directory.
     pub path: FilePath,
+    /// The hash of the directory content.
     pub content_hash: GeneralHash,
+    /// The children of the directory.
     pub children: Mutex<Vec<Arc<AnalysisFile>>>,
+    /// The parent of the directory.
     pub parent: Mutex<Option<Weak<AnalysisFile>>>,
 }
 
@@ -77,8 +88,11 @@ pub struct AnalysisDirectoryInformation {
 /// * `parent` - The parent of the symlink.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisSymlinkInformation {
+    /// The path of the symlink.
     pub path: FilePath,
+    /// The hash of the symlink content.
     pub content_hash: GeneralHash,
+    /// The parent of the symlink.
     pub parent: Mutex<Option<Weak<AnalysisFile>>>,
 }
 
@@ -89,6 +103,8 @@ pub struct AnalysisSymlinkInformation {
 /// * `parent` - The parent of the file.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisOtherInformation {
+    /// The path of the file.
     pub path: FilePath,
+    /// The parent of the file.
     pub parent: Mutex<Option<Weak<AnalysisFile>>>,
 }

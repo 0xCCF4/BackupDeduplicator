@@ -28,7 +28,9 @@ type FileIdType = u128; // high-res file-id
 /// * `drive` - The device id of the file.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct HandleIdentifier {
+    /// Value identifying the file.
     pub inode: FileIdType,
+    /// Value identifying the device.
     pub drive: DeviceIdType,
 }
 

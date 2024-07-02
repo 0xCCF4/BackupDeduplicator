@@ -25,8 +25,11 @@ use std::time::Duration;
 /// * `output` - The output file to write the results to.
 /// * `threads` - The number of threads to use for the analysis. If None, the number of threads is equal to the number of CPUs.
 pub struct AnalysisSettings {
+    /// The input file to analyze.
     pub input: PathBuf,
+    /// The output file to write the results to.
     pub output: PathBuf,
+    /// The number of threads to use for the analysis. If None, the number of threads is equal to the number of CPUs.
     pub threads: Option<usize>,
 }
 

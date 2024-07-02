@@ -11,8 +11,10 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Hash)]
 pub enum ArchiveType {
     #[cfg(feature = "archive-tar")]
+    /// Tar archive
     Tar,
     #[cfg(feature = "archive-zip")]
+    /// Zip archive
     Zip,
 }
 
@@ -150,14 +152,18 @@ impl ArchiveType {
     }
 }
 
+/// A general archive. Provides a general interface to abstract the actual implementation of different archive types.
 pub enum GeneralArchive<R: Read> {
     #[cfg(feature = "archive-tar")]
+    /// A Tar archive.
     Tar(tar::TarArchive<R>),
     #[cfg(feature = "archive-zip")]
+    /// A Zip archive.
     Zip(zip::ZipArchive<R>),
 }
 
 impl<R: Read> GeneralArchive<R> {
+    /// Create a new archive from a stream.
     pub fn new(archive_type: ArchiveType, stream: R) -> Result<Self> {
         Ok(match archive_type {
             #[cfg(feature = "archive-tar")]
@@ -167,6 +173,7 @@ impl<R: Read> GeneralArchive<R> {
         })
     }
 
+    /// Get the entries/iterator of the archive.
     pub fn entries(&mut self) -> Result<ArchiveIterator<R>> {
         Ok(match self {
             #[cfg(feature = "archive-tar")]
@@ -177,10 +184,14 @@ impl<R: Read> GeneralArchive<R> {
     }
 }
 
+/// An iterator over the entries of an archive. Provides a general interface to abstract the actual
+/// implementation of different archive types.
 pub enum ArchiveIterator<'a, R: Read> {
     #[cfg(feature = "archive-tar")]
+    /// A Tar archive iterator.
     Tar(tar::TarArchiveIterator<'a, R>),
     #[cfg(feature = "archive-zip")]
+    /// A Zip archive iterator.
     Zip(zip::ZipArchiveIterator<'a, R>),
 }
 
@@ -196,14 +207,19 @@ impl<'a, R: Read> Iterator for ArchiveIterator<'a, R> {
     }
 }
 
+/// An archive entry. Provides a general interface to abstract the actual implementation of different
+/// archive types.
 pub enum ArchiveEntry<'a, R: Read> {
     #[cfg(feature = "archive-tar")]
+    /// A Tar archive entry.
     TarEntry(tar::TarEntryRaw<'a, R>),
     #[cfg(feature = "archive-zip")]
+    /// A Zip archive entry.
     ZipEntry(zip::ZipEntryRaw<'a>),
 }
 
 impl<'a, R: Read> ArchiveEntry<'a, R> {
+    /// Get the path of the archive entry.
     pub fn path(&self) -> Result<PathBuf> {
         Ok(match self {
             #[cfg(feature = "archive-tar")]
@@ -218,6 +234,7 @@ impl<'a, R: Read> ArchiveEntry<'a, R> {
         })
     }
 
+    /// Get the size of the file. Might be 0 if the size could not be determined.
     pub fn size(&self) -> u64 {
         match self {
             #[cfg(feature = "archive-tar")]
@@ -227,6 +244,12 @@ impl<'a, R: Read> ArchiveEntry<'a, R> {
         }
     }
 
+    /// Get the modified time of the archive entry.
+    /// The time is in seconds since the Unix epoch.
+    /// 
+    /// # Returns
+    /// The modified time of the archive entry.
+    /// Might be 0 if the time could not be determined.
     pub fn modified(&self) -> u64 {
         match self {
             #[cfg(feature = "archive-tar")]
@@ -261,6 +284,7 @@ impl<'a, R: Read> ArchiveEntry<'a, R> {
         }
     }
 
+    /// Get the stream to read the underlying (uncompressed) data of the archive entry.
     pub fn stream(&mut self) -> Box<&mut dyn Read> {
         match self {
             #[cfg(feature = "archive-tar")]
@@ -305,8 +329,10 @@ impl<'a, R: Read> Debug for ArchiveEntry<'a, R> {
 }
 
 #[cfg(feature = "archive-tar")]
+/// Contains implementation of the tar archive proxy.
 pub mod tar;
 #[cfg(feature = "archive-zip")]
+/// Contains implementation of the zip archive proxy.
 pub mod zip;
 
 impl<R: Read> BufferCopyStreamReader<R> {

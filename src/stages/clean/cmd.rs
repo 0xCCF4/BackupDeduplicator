@@ -13,9 +13,13 @@ use std::path::PathBuf;
 /// * `root` - The root path of the original working directory. This is used to resolve relative paths.
 /// * `follow_symlinks` - Whether to follow symlinks when checking if files exist.
 pub struct CleanSettings {
+    /// The input hashtree file to clean.
     pub input: PathBuf,
+    /// The output hashtree file to write the cleaned hashtree to.
     pub output: PathBuf,
+    /// The root path of the original working directory. This is used to resolve relative paths.
     pub root: Option<String>,
+    /// Whether to follow symlinks when checking if files exist.
     pub follow_symlinks: bool,
 }
 

@@ -14,11 +14,11 @@ pub fn worker_run_archive<R: Read>(
     id: usize,
     _arg: &mut WorkerArgument,
 ) -> Result<Vec<BuildFile>> {
-    let archive = archive_type
+    let _archive = archive_type
         .open(input)
         .map_err(|err| anyhow!("Failed to open archive: {}", err))?;
 
-    let mut context = Context {
+    let context = Context {
         id,
         path: FilePath::from_realpath(path).new_archive(),
     };

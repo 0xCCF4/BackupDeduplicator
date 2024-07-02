@@ -21,14 +21,21 @@ use std::sync::Arc;
 /// * `hash_type` - The hash algorithm to use for hashing files.
 /// * `continue_file` - Whether to continue an existing hash tree file.
 pub struct BuildSettings {
+    /// The directory to build.
     pub directory: PathBuf,
+    /// Whether to traverse into archives.
     pub into_archives: bool,
+    /// Whether to follow symlinks when traversing the file system.
     pub follow_symlinks: bool,
+    /// The output file to write the hash tree to.
     pub output: PathBuf,
     // pub absolute_paths: bool,
+    /// The number of threads to use for building the hash tree. None = number of logical CPUs.
     pub threads: Option<usize>,
 
+    /// The hash algorithm to use for hashing files.
     pub hash_type: GeneralHashType,
+    /// Whether to continue an existing hash tree file.
     pub continue_file: bool,
 }
 

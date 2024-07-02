@@ -10,11 +10,12 @@ use serde::{Deserialize, Serialize};
 
 pub use HashTreeFileEntryTypeV1 as HashTreeFileEntryType;
 pub use HashTreeFileEntryV1 as HashTreeFileEntry;
-pub type HashTreeFileEntryRef<'a> = HashTreeFileEntryV1Ref<'a>;
-
 use crate::hash::{GeneralHash, GeneralHashType};
 use crate::path::FilePath;
 use crate::utils;
+
+/// The current version of the hash tree file.
+pub type HashTreeFileEntryRef<'a> = HashTreeFileEntryV1Ref<'a>;
 
 /// HashTreeFile file version. In further versions, the file format may change.
 /// Currently only one file version exist.
@@ -23,6 +24,7 @@ use crate::utils;
 /// * `V1` - Version 1 of the file format.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HashTreeFileVersion {
+    /// Version 1 of the file format.
     V1,
 }
 
@@ -34,17 +36,24 @@ pub enum HashTreeFileVersion {
 /// * `creation_date` - The creation date of the file in unix time
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HashTreeFileHeader {
+    /// The version of the file.
     pub version: HashTreeFileVersion,
+    /// The hash type used to hash the files.
     pub hash_type: GeneralHashType,
+    /// The creation date of the file in unix time
     pub creation_date: u64,
 }
 
 /// HashTreeFile entry type. Describes the type of file.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
 pub enum HashTreeFileEntryTypeV1 {
+    /// A file.
     File,
+    /// A directory.
     Directory,
+    /// A symlink.
     Symlink,
+    /// Other file type.
     Other,
 }
 
@@ -63,12 +72,19 @@ pub enum HashTreeFileEntryTypeV1 {
 /// * [HashTreeFileEntryV1Ref] which is a reference version of this struct.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct HashTreeFileEntryV1 {
+    /// The type of the file.
     pub file_type: HashTreeFileEntryTypeV1,
+    /// The last modified date of the file in unix time.
     pub modified: u64,
+    /// The size of the file in bytes for files, number of children for folders.
     pub size: u64,
+    /// The hash of the file content.
     pub hash: GeneralHash,
+    /// The path of the file.
     pub path: FilePath,
+    /// The children of the file. Only for directories.
     pub children: Vec<GeneralHash>,
+    /// The children of this file if it is an archive.
     pub archive_children: Vec<HashTreeFileEntryV1>,
 }
 
@@ -88,12 +104,19 @@ pub struct HashTreeFileEntryV1 {
 /// * [HashTreeFileEntryV1] which is the owned version of this struct.
 #[derive(Debug, Serialize)]
 pub struct HashTreeFileEntryV1Ref<'a> {
+    /// The type of the file.
     pub file_type: &'a HashTreeFileEntryTypeV1,
+    /// The last modified date of the file in unix time.
     pub modified: &'a u64,
+    /// The size of the file in bytes for files, number of children for folders.
     pub size: &'a u64,
+    /// The hash of the file content.
     pub hash: &'a GeneralHash,
+    /// The path of the file.
     pub path: &'a FilePath,
+    /// The children of the file. Only for directories.
     pub children: Vec<&'a GeneralHash>,
+    /// The children of this file if it is an archive.
     pub archive_children: Vec<HashTreeFileEntryV1>,
 }
 
@@ -109,9 +132,13 @@ where
     W: Write,
     R: BufRead,
 {
+    /// The header of the file.
     pub header: HashTreeFileHeader,
+    /// A map of files by their hash.
     pub file_by_hash: HashMap<GeneralHash, Vec<Arc<HashTreeFileEntry>>>,
+    /// A map of files by their path.
     pub file_by_path: HashMap<FilePath, Arc<HashTreeFileEntry>>,
+    /// A list of all entries.
     pub all_entries: Vec<Arc<HashTreeFileEntry>>,
 
     enable_file_by_hash: bool,

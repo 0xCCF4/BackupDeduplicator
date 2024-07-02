@@ -10,6 +10,7 @@ use std::path::PathBuf;
 /// * `path` - The path.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct PathComponent {
+    /// The path.
     pub path: PathBuf,
 }
 
@@ -43,6 +44,7 @@ pub struct PathComponent {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct FilePath {
+    /// The path components.
     pub path: Vec<PathComponent>,
 }
 

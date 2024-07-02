@@ -184,12 +184,14 @@ impl std::io::Seek for NullReader {
     }
 }
 
-// Container that calls a function when value is dropped.
+/// Container that calls a function when value is dropped.
+#[deprecated]
 pub struct DestroyContainer<T, F: FnOnce() -> ()> {
     inner: T,
     destroy_func: Option<F>,
 }
 
+#[allow(deprecated)]
 impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
     /// Create a new [DestroyContainer]. The destroy function is called when `this`
     /// instance is dropped.
@@ -208,12 +210,14 @@ impl<T, F: FnOnce() -> ()> DestroyContainer<T, F> {
     }
 }
 
+#[allow(deprecated)]
 impl<T, F: FnOnce() -> ()> Drop for DestroyContainer<T, F> {
     fn drop(&mut self) {
         self.destroy_func.take().map(|f| f());
     }
 }
 
+#[allow(deprecated)]
 impl<T, F: FnOnce() -> ()> Deref for DestroyContainer<T, F> {
     type Target = T;
 
@@ -222,6 +226,7 @@ impl<T, F: FnOnce() -> ()> Deref for DestroyContainer<T, F> {
     }
 }
 
+#[allow(deprecated)]
 impl<T: Read, F: FnOnce() -> ()> Read for DestroyContainer<T, F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)

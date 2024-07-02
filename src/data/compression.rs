@@ -13,9 +13,12 @@ use std::io::Read;
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq)]
 pub enum CompressionType {
     #[cfg(feature = "compress-flate2")]
+    /// Gzip compression
     Gz,
     #[cfg(feature = "compress-xz")]
+    /// Xz compression
     Xz,
+    /// No compression
     Null,
 }
 

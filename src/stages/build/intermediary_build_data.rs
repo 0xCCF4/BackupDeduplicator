@@ -12,9 +12,13 @@ use std::path::PathBuf;
 /// * `content_size` - The size of the file content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildFileInformation {
+    /// The path of the file.
     pub path: FilePath,
+    /// The last modification time of the file.
     pub modified: u64,
+    /// The hash of the file content.
     pub content_hash: GeneralHash,
+    /// The size of the file content.
     pub content_size: u64,
 }
 
@@ -28,10 +32,15 @@ pub struct BuildFileInformation {
 /// * `children` - The children of the archive file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildArchiveFileInformation {
+    /// The path of the archive file.
     pub path: FilePath,
+    /// The last modification time of the archive file.
     pub modified: u64,
+    /// The hash of the archive file content.
     pub content_hash: GeneralHash,
+    /// The size of the archive file content.
     pub content_size: u64,
+    /// The children of the archive file.
     pub children: Vec<BuildFile>,
 }
 
@@ -45,10 +54,15 @@ pub struct BuildArchiveFileInformation {
 /// * `children` - The children of the directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildDirectoryInformation {
+    /// The path of the directory.
     pub path: FilePath,
+    /// The last modification time of the directory.
     pub modified: u64,
+    /// The hash of the directory content.
     pub content_hash: GeneralHash,
+    /// The number of children in the directory.
     pub number_of_children: u64,
+    /// The children of the directory.
     pub children: Vec<BuildFile>,
 }
 
@@ -62,10 +76,15 @@ pub struct BuildDirectoryInformation {
 /// * `content_size` - The size of the symlink content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildSymlinkInformation {
+    /// The path of the symlink.
     pub path: FilePath,
+    /// The last modification time of the symlink.
     pub modified: u64,
+    /// The hash of the symlink content.
     pub content_hash: GeneralHash, // equal to the target file's hash or if not following symlinks, the symlink's path hashed
+    /// The target of the symlink.
     pub target: PathBuf,
+    /// The size of the symlink content.
     pub content_size: u64,
 }
 
@@ -78,8 +97,11 @@ pub struct BuildSymlinkInformation {
 /// * `content_size` - The size of the file content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildOtherInformation {
+    /// The path of the file.
     pub path: FilePath,
+    /// The last modification time of the file.
     pub modified: u64,
+    /// The size of the file content.
     pub content_size: u64,
 }
 
@@ -90,7 +112,9 @@ pub struct BuildOtherInformation {
 /// * `content_hash` - The hash of the file content.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildStubInformation {
+    /// The path of the file.
     pub path: FilePath,
+    /// The hash of the file content.
     pub content_hash: GeneralHash,
 }
 
@@ -105,11 +129,17 @@ pub struct BuildStubInformation {
 /// * `Stub` - A file that is not kept in memory but already saved to disk in the hashtree file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuildFile {
+    /// A regular file.
     File(BuildFileInformation),
+    /// An archive file (special variant of file, including subtree).
     ArchiveFile(BuildArchiveFileInformation),
+    /// A directory.
     Directory(BuildDirectoryInformation),
+    /// A symlink.
     Symlink(BuildSymlinkInformation),
+    /// A file that is not a regular file, directory, or symlink, or a file for which permissions are missing.
     Other(BuildOtherInformation), // for unsupported file types like block devices, character devices, etc., or files without permission
+    /// A file that is not kept in memory but already saved to disk in the hashtree file.
     Stub(BuildStubInformation),   // for files that are already analyzed
 }
 

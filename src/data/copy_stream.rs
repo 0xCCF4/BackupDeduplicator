@@ -171,6 +171,19 @@ impl<R: Read> BufferCopyStreamReader<R> {
         }
     }
 
+    /// Buffer the given amount of bytes from the underlying reader in chunks.
+    /// This method will allocate a buffer with the given size once. Then reuse this buffer
+    /// for reading the data from the underlying reader.
+    /// 
+    /// # Arguments
+    /// * `length` - The amount of bytes to buffer.
+    /// * `chunk_size` - The amount of bytes to request from the underlying reader in each iteration.
+    /// 
+    /// # Returns
+    /// The amount of bytes read.
+    /// 
+    /// # Errors
+    /// If the underlying reader could not be read.
     pub fn buffer_bytes_chunked(&self, length: usize, chunk_size: usize) -> std::io::Result<usize> {
         let mut allocated = 0;
 
@@ -181,7 +194,7 @@ impl<R: Read> BufferCopyStreamReader<R> {
             let bytes_to_read = min(length - allocated, chunk_size);
 
             // required for streams that do not have an EOF
-            if bytes_to_read <= 0 {
+            if bytes_to_read == 0 {
                 return Ok(allocated);
             }
 
@@ -192,6 +205,17 @@ impl<R: Read> BufferCopyStreamReader<R> {
         }
     }
 
+    /// Buffer the given amount of bytes from the underlying reader in chunks.
+    /// Uses a default chunk size of 4096 bytes.
+    /// 
+    /// # Arguments
+    /// * `length` - The amount of bytes to buffer.
+    /// 
+    /// # Returns
+    /// The amount of bytes read.
+    /// 
+    /// # Errors
+    /// If the underlying reader could not be read.
     pub fn buffer_bytes_chunked_default(&self, length: usize) -> std::io::Result<usize> {
         self.buffer_bytes_chunked(length, 4096)
     }

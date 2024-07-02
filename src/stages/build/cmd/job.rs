@@ -4,6 +4,7 @@ use crate::stages::build::intermediary_build_data::BuildFile;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 
+/// A shared build job. Used to share a build job between threads.
 pub type SharedBuildJob = Arc<BuildJob>;
 
 static JOB_COUNTER: Mutex<usize> = Mutex::new(0);
@@ -21,7 +22,9 @@ fn new_job_counter_id() -> usize {
 /// * `Analyzed` - The directory has been expanded and can be analyzed further.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum BuildJobState {
+    /// The job has not been processed yet.
     NotProcessed,
+    /// The directory has been expanded and can be analyzed further.
     Analyzed,
 }
 
@@ -34,10 +37,15 @@ pub enum BuildJobState {
 /// * `state` - The state of the job.
 #[derive(Debug)]
 pub struct BuildJob {
+    /// The job id.
     id: usize,
+    /// The parent job of this job.
     pub parent: Option<SharedBuildJob>,
+    /// The finished children of this job.
     pub finished_children: Mutex<Vec<BuildFile>>,
+    /// The path of the file/directory to hash.
     pub target_path: FilePath,
+    /// The state of the job.
     pub state: BuildJobState,
 }
 
@@ -95,7 +103,9 @@ impl JobTrait for BuildJob {
 /// * `content` - The content of the job result.
 #[derive(Debug, Serialize, Clone)]
 pub struct JobResultContent {
+    /// Whether the content was already cached.
     pub already_cached: bool,
+    /// The content of the job result.
     pub content: BuildFile,
 }
 
@@ -106,7 +116,9 @@ pub struct JobResultContent {
 /// * `Intermediate` - An intermediate result of a command. Returned if the job has a parent.
 #[derive(Debug, Serialize, Clone)]
 pub enum JobResult {
+    /// The final result of command. Returned if the job has no parent.
     Final(JobResultContent),
+    /// An intermediate result of a command. Returned if the job has a parent.
     Intermediate(JobResultContent),
 }
 

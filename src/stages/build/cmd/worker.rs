@@ -31,9 +31,13 @@ mod symlink;
 /// * `hash_type` - The hash algorithm to use for hashing files.
 /// * `save_file_by_path` - A hash map of [FilePath] -> [HashTreeFileEntry].
 pub struct WorkerArgument {
+    /// Whether to follow symlinks when traversing the file system.
     pub follow_symlinks: bool,
+    /// Whether to traverse into archives.
     pub archives: bool,
+    /// The hash algorithm to use for hashing files.
     pub hash_type: GeneralHashType,
+    /// A hash map of [FilePath] -> [HashTreeFileEntry].
     pub save_file_by_path: Arc<HashMap<FilePath, HashTreeFileEntry>>,
 }
 
