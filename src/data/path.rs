@@ -42,7 +42,7 @@ pub struct PathComponent {
 /// let path = FilePath::from_realpath(PathBuf::from("test.txt"));
 ///
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub struct FilePath {
     /// The path components.
     pub path: Vec<PathComponent>,
@@ -209,22 +209,6 @@ impl FilePath {
         }
     }
 }
-
-impl PartialEq for FilePath {
-    /// Compares two file paths.
-    ///
-    /// # Arguments
-    /// * `other` - The other file path.
-    ///
-    /// # Returns
-    /// Whether the file paths are equal.
-    fn eq(&self, other: &Self) -> bool {
-        self.path.len() == other.path.len()
-            && self.path.iter().zip(other.path.iter()).all(|(a, b)| a == b)
-    }
-}
-
-impl Eq for FilePath {}
 
 impl std::fmt::Display for FilePath {
     /// Formats the file path to a string.

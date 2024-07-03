@@ -14,6 +14,36 @@ use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
+/// Arguments of the [worker_run_directory] function.
+///
+/// # Fields
+/// * `path` - The path to the directory.
+/// * `modified` - The last modified time of the directory.
+/// * `size` - The size of the directory (given by fs::metadata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
+pub struct WorkerRunDirectoryArguments<'a, 'b, 'c> {
+    /// The path to the directory.
+    pub path: PathBuf,
+    /// The last modified time of the directory.
+    pub modified: u64,
+    /// The size of the directory (given by fs::metadata).
+    pub size: u64,
+    /// The id of the worker.
+    pub id: usize,
+    /// The job to process.
+    pub job: BuildJob,
+    /// The channel to publish the result to.
+    pub result_publish: &'a Sender<JobResult>,
+    /// The channel to publish new jobs to.
+    pub job_publish: &'b Sender<BuildJob>,
+    /// The argument for the worker thread.
+    pub arg: &'c mut WorkerArgument,
+}
+
 /// Analyze a directory.
 ///
 /// # Arguments
@@ -25,16 +55,18 @@ use std::sync::Arc;
 /// * `result_publish` - The channel to publish the result to.
 /// * `job_publish` - The channel to publish new jobs to.
 /// * `arg` - The argument for the worker thread.
-pub fn worker_run_directory(
-    path: PathBuf,
-    modified: u64,
-    size: u64,
-    id: usize,
-    mut job: BuildJob,
-    result_publish: &Sender<JobResult>,
-    job_publish: &Sender<BuildJob>,
-    arg: &mut WorkerArgument,
-) {
+pub fn worker_run_directory(arguments: WorkerRunDirectoryArguments) {
+    let WorkerRunDirectoryArguments {
+        path,
+        modified,
+        size,
+        id,
+        mut job,
+        result_publish,
+        job_publish,
+        arg,
+    } = arguments;
+
     trace!(
         "[{}] analyzing directory {} > {:?}",
         id,

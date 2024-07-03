@@ -91,6 +91,7 @@ impl ResultTrait for AnalysisResult {}
 /// # Returns
 /// The parent file and the parent path.
 /// If the parent file is not present, return None.
+#[allow(clippy::type_complexity)] // non-public function
 fn parent_file<'a>(
     file: &AnalysisIntermediaryFile,
     arg: &'a AnalysisWorkerArgument,

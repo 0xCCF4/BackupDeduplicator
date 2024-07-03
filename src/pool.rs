@@ -217,9 +217,11 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
                 None => {
                     error!("ThreadPool is shutting down. Cannot publish job.");
                 }
-                Some(job_publish) => if let Err(e) = job_publish.send(job) {
-                    error!("Failed to publish job on thread pool. {}", e);
-                },
+                Some(job_publish) => {
+                    if let Err(e) = job_publish.send(job) {
+                        error!("Failed to publish job on thread pool. {}", e);
+                    }
+                }
             },
         }
     }

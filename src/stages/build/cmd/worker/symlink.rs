@@ -12,27 +12,59 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
-/// Analyze a symlink.
+/// Arguments of the [worker_run_symlink] function.
 ///
-/// # Arguments
+/// # Fields
 /// * `path` - The path to the symlink.
 /// * `modified` - The last modified time of the symlink.
-/// * `size` - The size of the symlink (given by fs::metdata).
+/// * `size` - The size of the symlink (given by fs::metadata).
 /// * `id` - The id of the worker.
 /// * `job` - The job to process.
 /// * `result_publish` - The channel to publish the result to.
 /// * `job_publish` - The channel to publish new jobs to.
 /// * `arg` - The argument for the worker thread.
-pub fn worker_run_symlink(
-    path: PathBuf,
-    modified: u64,
-    size: u64,
-    id: usize,
-    job: BuildJob,
-    result_publish: &Sender<JobResult>,
-    job_publish: &Sender<BuildJob>,
-    arg: &mut WorkerArgument,
-) {
+pub struct WorkerRunSymlinkArguments<'a, 'b, 'c> {
+    /// The path to the symlink.
+    pub path: PathBuf,
+    /// The last modified time of the symlink.
+    pub modified: u64,
+    /// The size of the symlink (given by fs::metadata).
+    pub size: u64,
+    /// The id of the worker.
+    pub id: usize,
+    /// The job to process.
+    pub job: BuildJob,
+    /// The channel to publish the result to.
+    pub result_publish: &'a Sender<JobResult>,
+    /// The channel to publish new jobs to.
+    pub job_publish: &'b Sender<BuildJob>,
+    /// The argument for the worker thread.
+    pub arg: &'c mut WorkerArgument,
+}
+
+/// Analyze a symlink.
+///
+/// # Arguments
+/// * `path` - The path to the symlink.
+/// * `modified` - The last modified time of the symlink.
+/// * `size` - The size of the symlink (given by fs::metadata).
+/// * `id` - The id of the worker.
+/// * `job` - The job to process.
+/// * `result_publish` - The channel to publish the result to.
+/// * `job_publish` - The channel to publish new jobs to.
+/// * `arg` - The argument for the worker thread.
+pub fn worker_run_symlink(arguments: WorkerRunSymlinkArguments) {
+    let WorkerRunSymlinkArguments {
+        path,
+        modified,
+        size,
+        id,
+        job,
+        result_publish,
+        job_publish,
+        arg,
+    } = arguments;
+
     trace!(
         "[{}] analyzing symlink {} > {:?}",
         id,

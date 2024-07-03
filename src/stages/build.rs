@@ -9,6 +9,7 @@ pub mod output {
 
 /// Contains the cli command implementation for the build command.
 pub mod cmd {
+    #[allow(clippy::module_inception)] // private module
     mod cmd;
     /// Contains the job definition for the build command.
     pub mod job;

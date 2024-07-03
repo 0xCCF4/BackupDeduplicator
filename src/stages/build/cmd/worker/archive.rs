@@ -18,19 +18,13 @@ pub fn worker_run_archive<R: Read>(
         .open(input)
         .map_err(|err| anyhow!("Failed to open archive: {}", err))?;
 
-    let context = Context {
+    #[allow(dead_code)]
+    let _context = Context {
         id,
         path: FilePath::from_realpath(path).new_archive(),
     };
 
-    let mut entries = Vec::new();
-
-    // todo remove placeholder
-    entries.push(BuildFile::Other(BuildOtherInformation {
-        path: context.path.child("test-placeholder.txt"),
-        modified: 0,
-        content_size: 0,
-    }));
+    let entries = Vec::new();
 
     /* for entry in archive {
         let entry = entry.map_err(|err| {

@@ -116,7 +116,7 @@ fn main() {
     trace!("Initializing program");
 
     if let Some(threads) = args.threads {
-        if threads <= 0 {
+        if threads == 0 {
             eprintln!("Invalid number of threads: {}", threads);
             std::process::exit(exitcode::CONFIG);
         }
@@ -229,7 +229,7 @@ fn main() {
                         info!("Executing clean command");
                         match clean::cmd::run(CleanSettings {
                             input: output.clone(),
-                            output: output,
+                            output,
                             root: None,
                             follow_symlinks,
                         }) {

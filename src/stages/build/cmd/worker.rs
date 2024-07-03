@@ -1,10 +1,12 @@
 use crate::hash::GeneralHashType;
 use crate::path::FilePath;
 use crate::stages::build::cmd::job::{BuildJob, JobResult, JobResultContent};
-use crate::stages::build::cmd::worker::directory::worker_run_directory;
-use crate::stages::build::cmd::worker::file::worker_run_file;
-use crate::stages::build::cmd::worker::other::worker_run_other;
-use crate::stages::build::cmd::worker::symlink::worker_run_symlink;
+use crate::stages::build::cmd::worker::directory::{
+    worker_run_directory, WorkerRunDirectoryArguments,
+};
+use crate::stages::build::cmd::worker::file::{worker_run_file, WorkerRunFileArguments};
+use crate::stages::build::cmd::worker::other::{worker_run_other, WorkerRunOtherArguments};
+use crate::stages::build::cmd::worker::symlink::{worker_run_symlink, WorkerRunSymlinkArguments};
 use crate::stages::build::intermediary_build_data::{
     BuildFile, BuildOtherInformation, BuildStubInformation,
 };
@@ -123,7 +125,7 @@ pub fn worker_run(
     let size = metadata.len();
 
     if metadata.is_symlink() {
-        worker_run_symlink(
+        worker_run_symlink(WorkerRunSymlinkArguments {
             path,
             modified,
             size,
@@ -132,9 +134,9 @@ pub fn worker_run(
             result_publish,
             job_publish,
             arg,
-        );
+        });
     } else if metadata.is_dir() {
-        worker_run_directory(
+        worker_run_directory(WorkerRunDirectoryArguments {
             path,
             modified,
             size,
@@ -143,9 +145,9 @@ pub fn worker_run(
             result_publish,
             job_publish,
             arg,
-        );
+        });
     } else if metadata.is_file() {
-        worker_run_file(
+        worker_run_file(WorkerRunFileArguments {
             path,
             modified,
             size,
@@ -154,9 +156,9 @@ pub fn worker_run(
             result_publish,
             job_publish,
             arg,
-        );
+        });
     } else {
-        worker_run_other(
+        worker_run_other(WorkerRunOtherArguments {
             path,
             modified,
             size,
@@ -165,7 +167,7 @@ pub fn worker_run(
             result_publish,
             job_publish,
             arg,
-        );
+        });
     }
 }
 

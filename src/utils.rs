@@ -195,7 +195,9 @@ impl<T, F: FnOnce()> DestroyContainer<T, F> {
 #[allow(deprecated)]
 impl<T, F: FnOnce()> Drop for DestroyContainer<T, F> {
     fn drop(&mut self) {
-        if let Some(f) = self.destroy_func.take() { f() }
+        if let Some(f) = self.destroy_func.take() {
+            f()
+        }
     }
 }
 

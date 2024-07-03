@@ -269,10 +269,10 @@ impl<'a, R: Read> ArchiveEntry<'a, R> {
                         datetime.second() as u32,
                     );
 
-                    if ymd.is_none() || hms.is_none() {
-                        NaiveDateTime::UNIX_EPOCH
+                    if let (Some(date), Some(time)) = (ymd, hms) {
+                        NaiveDateTime::new(date, time)
                     } else {
-                        NaiveDateTime::new(ymd.unwrap(), hms.unwrap())
+                        NaiveDateTime::UNIX_EPOCH
                     }
                 })
                 .map(|naive_datetime| {
