@@ -1,9 +1,10 @@
 use crate::archive::ArchiveType;
 use crate::compression::CompressionType;
 use crate::copy_stream::BufferCopyStreamReader;
-use crate::hash::HashingStream;
+use crate::hash::{GeneralHash, HashingStream};
+use crate::path::FilePath;
 use crate::stages::build::cmd::job::{BuildJob, JobResult};
-use crate::stages::build::cmd::worker::archive::worker_run_archive;
+use crate::stages::build::cmd::worker::archive::{worker_run_archive, WorkerRunArchiveArguments};
 use crate::stages::build::cmd::worker::GeneralHashType;
 use crate::stages::build::cmd::worker::{
     worker_create_error, worker_fetch_savedata, worker_publish_result_or_trigger_parent,
@@ -17,7 +18,7 @@ use anyhow::anyhow;
 use log::{error, trace};
 use std::fs;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
@@ -100,7 +101,7 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
         }
     }
 
-    let mut hasher = match File::open(&path) {
+    let stream = match File::open(&path) {
         Err(err) => {
             error!("Error while opening file {:?}: {}", path, err);
             worker_publish_result_or_trigger_parent(
@@ -114,8 +115,11 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
             );
             return;
         }
-        Ok(stream) => HashingStream::new(stream, arg.hash_type),
+        Ok(stream) => stream,
     };
+    let stream = BufReader::new(stream);
+
+    let mut hasher = HashingStream::new(stream, arg.hash_type);
 
     let (archive, mut stream) = match arg.archives {
         true => {
@@ -155,7 +159,13 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
             Ok(None) => Ok(None),
             Ok(Some((compression_type, archive_type))) => {
                 let stream = compression_type.open(&mut stream);
-                worker_run_archive(stream, &path, archive_type, id, arg).map(Some)
+                worker_run_archive(
+                    stream,
+                    &FilePath::from_realpath(&path),
+                    archive_type,
+                    &mut WorkerRunArchiveArguments { id, arg },
+                )
+                .map(Some)
             }
         }
     };
@@ -212,13 +222,26 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
             content_hash: hash,
             content_size,
         }),
-        Some(archive_result) => BuildFile::ArchiveFile(BuildArchiveFileInformation {
-            path: job.target_path.clone(),
-            modified,
-            content_hash: hash,
-            content_size,
-            children: archive_result,
-        }),
+        Some(mut archive_result) => {
+            let directory_hash = {
+                archive_result.sort_by(|a, b| {
+                    a.get_content_hash()
+                        .partial_cmp(b.get_content_hash())
+                        .expect("Two hashes must compare to each other")
+                });
+                let mut hash = GeneralHash::from_type(arg.hash_type);
+                let _ = hash.hash_directory(archive_result.iter());
+                hash
+            };
+            BuildFile::ArchiveFile(BuildArchiveFileInformation {
+                path: job.target_path.clone(),
+                modified,
+                file_hash: hash,
+                directory_hash,
+                content_size,
+                children: archive_result,
+            })
+        }
     };
     worker_publish_result_or_trigger_parent(id, false, file, job, result_publish, job_publish, arg);
 }
@@ -232,7 +255,7 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
 /// The archive type and the stream to the archive.
 ///
 /// # Error
-/// If the file could not be opened.
+/// If the stream could not be read
 pub fn is_archive<R: Read>(
     stream: BufferCopyStreamReader<R>,
 ) -> anyhow::Result<Option<(CompressionType, ArchiveType)>> {

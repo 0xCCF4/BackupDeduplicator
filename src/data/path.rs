@@ -155,6 +155,14 @@ impl FilePath {
         result
     }
 
+    /// Gets the last component of the file path.
+    ///
+    /// # Returns
+    /// The last component of the file path. None if the file path is empty.
+    pub fn last_component(&self) -> Option<&PathComponent> {
+        self.path.last()
+    }
+
     /// Gets the parent of the file path.
     ///
     /// # Returns

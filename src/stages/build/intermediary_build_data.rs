@@ -27,7 +27,8 @@ pub struct BuildFileInformation {
 /// # Fields
 /// * `path` - The path of the archive file.
 /// * `modified` - The last modification time of the archive file.
-/// * `content_hash` - The hash of the archive file content.
+/// * `file_hash` - The hash of the archive file content.
+/// * `directory_hash` - The hash of the archive directory structure. Used to find duplicate file structures
 /// * `content_size` - The size of the archive file content.
 /// * `children` - The children of the archive file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +38,9 @@ pub struct BuildArchiveFileInformation {
     /// The last modification time of the archive file.
     pub modified: u64,
     /// The hash of the archive file content.
-    pub content_hash: GeneralHash,
+    pub file_hash: GeneralHash,
+    /// The hash of the archive directory structure. Used to find duplicate file structures
+    pub directory_hash: GeneralHash,
     /// The size of the archive file content.
     pub content_size: u64,
     /// The children of the archive file.
@@ -153,7 +156,7 @@ impl BuildFile {
     pub fn get_content_hash(&self) -> &GeneralHash {
         match self {
             BuildFile::File(info) => &info.content_hash,
-            BuildFile::ArchiveFile(info) => &info.content_hash,
+            BuildFile::ArchiveFile(info) => &info.directory_hash,
             BuildFile::Directory(info) => &info.content_hash,
             BuildFile::Symlink(info) => &info.content_hash,
             BuildFile::Other(_) => &GeneralHash::NULL,

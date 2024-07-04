@@ -152,10 +152,12 @@ impl<R: Read> BufferCopyStreamReader<R> {
                 read_buffer.push(0);
             }
 
-            let read_result = reader.read(read_buffer)?;
+            let window = &mut read_buffer[..length];
+
+            let read_result = reader.read(window)?;
 
             buffer.reserve(read_result);
-            for value in read_buffer.iter().take(read_result) {
+            for value in window.iter().take(read_result) {
                 buffer.push(*value);
             }
 

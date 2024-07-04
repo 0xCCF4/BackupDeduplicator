@@ -67,6 +67,7 @@ pub enum HashTreeFileEntryTypeV1 {
 /// * `path` - The path of the file.
 /// * `children` - The children of the file. Only for directories.
 /// * `archive_children` - The children of this file if it is an archive.
+/// * `archive_outer_hash` - Archive stream hash, the hash of the archive file itself
 ///
 /// # See also
 /// * [HashTreeFileEntryV1Ref] which is a reference version of this struct.
@@ -86,6 +87,8 @@ pub struct HashTreeFileEntryV1 {
     pub children: Vec<GeneralHash>,
     /// The children of this file if it is an archive.
     pub archive_children: Vec<HashTreeFileEntryV1>,
+    /// Archive stream hash, the hash of the archive file itself
+    pub archive_outer_hash: Option<GeneralHash>,
 }
 
 /// HashTreeFile entry reference. Describes an analyzed file.
@@ -99,6 +102,7 @@ pub struct HashTreeFileEntryV1 {
 /// * `path` - The path of the file.
 /// * `children` - The children of the file. Only for directories.
 /// * `archive_children` - The children of this file if it is an archive.
+/// * `archive_outer_hash` - Archive stream hash, the hash of the archive file itself
 ///
 /// # See also
 /// * [HashTreeFileEntryV1] which is the owned version of this struct.
@@ -118,6 +122,8 @@ pub struct HashTreeFileEntryV1Ref<'a> {
     pub children: Vec<&'a GeneralHash>,
     /// The children of this file if it is an archive.
     pub archive_children: Vec<HashTreeFileEntryV1>,
+    /// Archive stream hash, the hash of the archive file itself
+    pub archive_outer_hash: Option<&'a GeneralHash>,
 }
 
 /// Interface to access and manage a hash tree file.

@@ -22,8 +22,9 @@ impl From<BuildFileInformation> for HashTreeFileEntry {
             size: value.content_size,
             hash: value.content_hash,
             path: value.path,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -41,7 +42,8 @@ impl From<BuildArchiveFileInformation> for HashTreeFileEntry {
             file_type: HashTreeFileEntryType::File,
             modified: value.modified,
             size: value.content_size,
-            hash: value.content_hash,
+            hash: value.directory_hash,
+            archive_outer_hash: Some(value.file_hash),
             path: value.path,
             children: Vec::with_capacity(0),
             archive_children: Vec::with_capacity(value.children.len()),
@@ -68,8 +70,9 @@ impl From<BuildSymlinkInformation> for HashTreeFileEntry {
             size: value.content_size,
             hash: value.content_hash,
             path: value.path,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -90,7 +93,8 @@ impl From<BuildDirectoryInformation> for HashTreeFileEntry {
             hash: value.content_hash,
             path: value.path,
             children: Vec::with_capacity(value.children.len()),
-            archive_children: Vec::with_capacity(0),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         };
         for child in value.children {
             result.children.push(child.get_content_hash().clone());
@@ -114,8 +118,9 @@ impl From<BuildOtherInformation> for HashTreeFileEntry {
             size: value.content_size,
             hash: GeneralHash::NULL,
             path: value.path,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -135,8 +140,9 @@ impl From<BuildStubInformation> for HashTreeFileEntry {
             size: 0,
             hash: value.content_hash,
             path: value.path,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -156,8 +162,9 @@ impl<'a> From<&'a BuildFileInformation> for HashTreeFileEntryRef<'a> {
             hash: &value.content_hash,
             path: &value.path,
             size: &value.content_size,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -174,11 +181,12 @@ impl<'a> From<&'a BuildArchiveFileInformation> for HashTreeFileEntryRef<'a> {
         let mut result = Self {
             file_type: &HashTreeFileEntryType::File,
             modified: &value.modified,
-            hash: &value.content_hash,
+            hash: &value.directory_hash,
             path: &value.path,
             size: &value.content_size,
             children: Vec::with_capacity(0),
             archive_children: Vec::with_capacity(value.children.len()),
+            archive_outer_hash: Some(&value.file_hash),
         };
         for child in &value.children {
             result.archive_children.push(child.clone().into());
@@ -202,8 +210,9 @@ impl<'a> From<&'a BuildSymlinkInformation> for HashTreeFileEntryRef<'a> {
             hash: &value.content_hash,
             path: &value.path,
             size: &value.content_size,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -224,7 +233,8 @@ impl<'a> From<&'a BuildDirectoryInformation> for HashTreeFileEntryRef<'a> {
             path: &value.path,
             size: &value.number_of_children,
             children: Vec::with_capacity(value.children.len()),
-            archive_children: Vec::with_capacity(0),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         };
         for child in &value.children {
             result.children.push(child.get_content_hash());
@@ -248,8 +258,9 @@ impl<'a> From<&'a BuildOtherInformation> for HashTreeFileEntryRef<'a> {
             hash: &GeneralHash::NULL,
             path: &value.path,
             size: &value.content_size,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -269,8 +280,9 @@ impl<'a> From<&'a BuildStubInformation> for HashTreeFileEntryRef<'a> {
             hash: &value.content_hash,
             path: &value.path,
             size: &0,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
@@ -330,8 +342,9 @@ impl<'a> From<&'a HashTreeFileEntry> for HashTreeFileEntryRef<'a> {
             hash: &value.hash,
             path: &value.path,
             size: &value.size,
-            children: Vec::with_capacity(0),
-            archive_children: Vec::with_capacity(0),
+            children: Vec::default(),
+            archive_children: Vec::default(),
+            archive_outer_hash: None,
         }
     }
 }
