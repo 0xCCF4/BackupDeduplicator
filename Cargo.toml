@@ -20,7 +20,7 @@ env_logger = "0.11.2"
 log = "0.4.22"
 filetime = "0.2.23"
 exitcode = "1.1.2"
-serde = { version = "1.0.203", features = ["derive", "rc"] }
+serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_json = "1.0.120"
 num_cpus = "1.16.0"
 file-id = "0.2.1"
