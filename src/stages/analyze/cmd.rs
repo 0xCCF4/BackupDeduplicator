@@ -7,7 +7,6 @@ use crate::stages::analyze::worker::{
     worker_run, AnalysisJob, AnalysisResult, AnalysisWorkerArgument,
 };
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
-use crate::utils::NullWriter;
 use anyhow::{anyhow, Result};
 use log::{error, info, trace};
 use std::collections::HashMap;
@@ -72,7 +71,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     };
 
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
-    let mut null_out_writer = NullWriter::default();
+    let mut null_out_writer = std::io::empty();
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
     let mut save_file = HashTreeFile::new(
@@ -194,7 +193,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 #[derive(Debug, PartialEq, Hash, Eq)]
 struct SetKey<'a> {
     size: u64,
-    ftype: &'a HashTreeFileEntryType,
+    file_type: &'a HashTreeFileEntryType,
     children: &'a Vec<GeneralHash>,
 }
 /// Write the result entry to the output file. Find all duplicates of the file and write them to the output file.
@@ -219,7 +218,7 @@ fn write_result_entry(
     for file in file_by_hash.get(hash).unwrap() {
         sets.entry(SetKey {
             size: file.size,
-            ftype: &file.file_type,
+            file_type: &file.file_type,
             children: &file.children,
         })
         .or_default()
@@ -244,7 +243,7 @@ fn write_result_entry(
         }
 
         let result = DupSetEntryRef {
-            ftype: set.0.ftype,
+            ftype: set.0.file_type,
             size: set.0.size,
             hash,
             conflicting,

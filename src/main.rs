@@ -281,7 +281,7 @@ fn main() {
 
             if output.exists() && !overwrite {
                 eprintln!(
-                    "Output file already exists: {:?}. Set --override to override its content",
+                    "Output file already exists: {:?}. Set --overwrite to override its content",
                     output
                 );
                 std::process::exit(exitcode::CONFIG);
@@ -324,7 +324,7 @@ fn main() {
 
             if output.exists() && !overwrite {
                 eprintln!(
-                    "Output file already exists: {:?}. Set --override to override its content",
+                    "Output file already exists: {:?}. Set --overwrite to override its content",
                     output
                 );
                 std::process::exit(exitcode::CONFIG);

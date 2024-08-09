@@ -639,7 +639,7 @@ impl GeneralHash {
         let mut hasher = self.hasher();
 
         for component in &path.path {
-            hasher.update(component.path.as_os_str().as_encoded_bytes());
+            hasher.update(component.as_os_str().as_encoded_bytes());
         }
 
         *self = hasher.finalize();
@@ -757,6 +757,7 @@ impl<R: Read> Read for HashingStream<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes_read = self.stream.read(buf)?;
         self.hash.update(&buf[..bytes_read]);
+        self.bytes_processed += bytes_read as u64;
         Ok(bytes_read)
     }
 }

@@ -1,6 +1,7 @@
 use crate::hash::GeneralHash;
 use crate::path::FilePath;
 use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// Information about an analyzed file.
@@ -67,6 +68,74 @@ pub struct BuildDirectoryInformation {
     pub number_of_children: u64,
     /// The children of the directory.
     pub children: Vec<BuildFile>,
+}
+
+impl BuildDirectoryInformation {
+    /// Returns the child matching the provided name
+    ///
+    /// # Arguments
+    /// * `name` - The name of the child to find.
+    /// * `prefer_directory` - If true, prefer directories to files.
+    ///
+    /// # Returns
+    /// The child matching the provided name. If no child is found, None is returned.
+    pub fn get_child_by_name<Str: Into<OsString>>(
+        &self,
+        name: Str,
+        prefer_directory: bool,
+    ) -> Option<&BuildFile> {
+        let target_path = self.path.join(name);
+        let mut result = None;
+        for child in self
+            .children
+            .iter()
+            .filter(|child| child.get_path() == &target_path)
+        {
+            if child.is_directory() && prefer_directory {
+                return Some(child);
+            }
+
+            if child.is_file() && !prefer_directory {
+                return Some(child);
+            }
+
+            result = Some(child);
+        }
+        result
+    }
+
+    /// Returns child matching the provided name as mutable
+    ///
+    /// # Arguments
+    /// * `name` - The name of the child to find.
+    /// * `prefer_directory` - If true, prefer directories to files.
+    ///
+    /// # Returns
+    /// The child matching the provided name as mutable. If no child is found, None is returned.
+    pub fn get_child_by_name_mut<Str: Into<OsString>>(
+        &mut self,
+        name: Str,
+        prefer_directory: bool,
+    ) -> Option<&mut BuildFile> {
+        let target_path = self.path.join(name);
+        let mut result = None;
+        for child in self
+            .children
+            .iter_mut()
+            .filter(|child| child.get_path() == &target_path)
+        {
+            if child.is_directory() && prefer_directory {
+                return Some(child);
+            }
+
+            if child.is_file() && !prefer_directory {
+                return Some(child);
+            }
+
+            result = Some(child);
+        }
+        result
+    }
 }
 
 /// Information about an analyzed symlink.
@@ -225,5 +294,20 @@ impl BuildFile {
     /// True if this is a stub file, false otherwise.
     pub fn is_stub(&self) -> bool {
         matches!(self, BuildFile::Stub(_))
+    }
+
+    /// Get the last modification time of the file
+    ///
+    /// # Returns
+    /// The last modification time of the file.
+    pub fn modified(&self) -> u64 {
+        match self {
+            BuildFile::File(info) => info.modified,
+            BuildFile::ArchiveFile(info) => info.modified,
+            BuildFile::Directory(info) => info.modified,
+            BuildFile::Symlink(info) => info.modified,
+            BuildFile::Other(info) => info.modified,
+            BuildFile::Stub(_) => 0,
+        }
     }
 }

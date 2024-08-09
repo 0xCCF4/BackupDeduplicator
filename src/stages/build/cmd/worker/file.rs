@@ -210,6 +210,7 @@ pub fn worker_run_file(arguments: WorkerRunFileArguments) {
     } else {
         fs::metadata(&path)
             .map(|metadata| metadata.len())
+            .map_err(|err| anyhow!("Unable to read file size of {:?}: {}", path, err))
             .unwrap_or(0)
     };
 

@@ -1,6 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::io::{Read, SeekFrom, Write};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -92,131 +90,6 @@ pub fn get_time() -> u64 {
         .unwrap_or(0)
 }
 
-/// A writer that discards all data.
-///
-/// # Example
-/// ```
-/// use std::io::Write;
-///
-/// let mut writer = backup_deduplicator::utils::NullWriter::new();
-/// writer.write(b"Hello, world!").unwrap();
-/// ```
-#[derive(Default)]
-pub struct NullWriter {}
-
-impl Write for NullWriter {
-    /// Discard all data.
-    ///
-    /// # Arguments
-    /// * `buf` - The data to write.
-    ///
-    /// # Returns
-    /// The number of bytes written. Always the same as the length of `buf`.
-    ///
-    /// # Errors
-    /// Never
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Ok(buf.len())
-    }
-
-    /// Flush the writer.
-    ///
-    /// # Errors
-    /// Never
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// A reader that does not provide data
-///
-/// # Example
-/// ```
-/// use std::io::Read;
-///
-/// let mut reader = backup_deduplicator::utils::NullReader::new();
-/// let mut buf = [0; 10];
-/// assert_eq!(reader.read(&mut buf).unwrap(), 0);
-/// ```
-#[derive(Default)]
-pub struct NullReader {}
-
-impl std::io::Read for NullReader {
-    /// Does not provide any data.
-    ///
-    /// # Arguments
-    /// * `buf` - The buffer to read into.
-    ///
-    /// # Returns
-    /// The number of bytes read. Always 0.
-    ///
-    /// # Errors
-    /// Never
-    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-        Ok(0)
-    }
-}
-
-impl std::io::Seek for NullReader {
-    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Null reader does not support seeking",
-        ))
-    }
-}
-
-/// Container that calls a function when value is dropped.
-#[deprecated]
-pub struct DestroyContainer<T, F: FnOnce()> {
-    inner: T,
-    destroy_func: Option<F>,
-}
-
-#[allow(deprecated)]
-impl<T, F: FnOnce()> DestroyContainer<T, F> {
-    /// Create a new [DestroyContainer]. The destroy function is called when `this`
-    /// instance is dropped.
-    ///
-    /// # Arguments
-    /// * `inner` - The inner value.
-    /// * `destroy_func` - The function to call when `this` instance is dropped.
-    ///
-    /// # Returns
-    /// A new [DestroyContainer].
-    pub fn new(inner: T, destroy_func: F) -> Self {
-        DestroyContainer {
-            inner,
-            destroy_func: Some(destroy_func),
-        }
-    }
-}
-
-#[allow(deprecated)]
-impl<T, F: FnOnce()> Drop for DestroyContainer<T, F> {
-    fn drop(&mut self) {
-        if let Some(f) = self.destroy_func.take() {
-            f()
-        }
-    }
-}
-
-#[allow(deprecated)]
-impl<T, F: FnOnce()> Deref for DestroyContainer<T, F> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-#[allow(deprecated)]
-impl<T: Read, F: FnOnce()> Read for DestroyContainer<T, F> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
-
 /// Get the maximum of two values.
 ///
 /// # Arguments
@@ -233,7 +106,7 @@ pub(crate) const fn max(a: usize, b: usize) -> usize {
 pub mod main {
     use crate::utils::LexicalAbsolute;
     use std::env;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     /// Changes the working directory to the given path.
     ///
@@ -328,6 +201,15 @@ pub mod main {
                 eprintln!("IO error, could not resolve output file: {:?}", e);
                 std::process::exit(exitcode::CONFIG);
             }
+        }
+    }
+
+    /// Convert a path to a relative path by striping the prefix.
+    pub fn to_relative(path: &Path, base: &Path) -> Option<PathBuf> {
+        if path.starts_with(base) {
+            path.strip_prefix(base).ok().map(|p| p.to_path_buf())
+        } else {
+            None
         }
     }
 }

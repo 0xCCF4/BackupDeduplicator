@@ -159,8 +159,7 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
     /// * `ThreadPool` - The thread pool struct with the worker threads.
     ///
     /// # Template Parameters
-    /// * `Argument` - The argument type that should be passed to the worker threads.
-    /// The argument type must implement the `Send` trait.
+    /// * `Argument` - The argument type that should be passed to the worker threads. The argument type must implement the `Send` trait.
     pub fn new<Argument: Send + 'static>(
         mut args: Vec<Argument>,
         func: WorkerEntry<Job, Result, Argument>,

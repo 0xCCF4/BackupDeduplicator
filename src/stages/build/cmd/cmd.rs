@@ -7,6 +7,7 @@ use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFile
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -71,7 +72,11 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
     };
 
     // create buf reader and writer
-    let mut result_in = std::io::BufReader::new(&result_file);
+    let mut result_in = std::io::BufReader::new(if build_settings.continue_file {
+        Box::new(&result_file) as Box<dyn Read>
+    } else {
+        Box::new(std::io::empty()) as Box<dyn Read>
+    });
     let mut result_out = std::io::BufWriter::new(&result_file);
 
     let mut save_file = HashTreeFile::new(
@@ -86,7 +91,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         Ok(_) => {}
         Err(err) => {
             if build_settings.continue_file && existed {
-                return Err(anyhow!("Failed to load header from result file: {}. Delete the output file or provide the --override flag to override", err));
+                return Err(anyhow!("Failed to load header from result file: {}. Delete the output file or provide the --overwrite flag to override", err));
             } else {
                 save_file.save_header()?;
             }
