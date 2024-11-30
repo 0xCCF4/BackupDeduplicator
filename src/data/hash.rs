@@ -6,7 +6,7 @@ use const_format::concatcp;
 use serde::de::Error;
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
@@ -237,7 +237,7 @@ impl Display for GeneralHashType {
 /// * [GeneralHashType] - representation of the different types of hash functions.
 /// * [GeneralHasher] - trait for computing hash values.
 ///
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd)]
+#[derive(Hash, PartialEq, Eq, Clone, PartialOrd)]
 pub enum GeneralHash {
     #[cfg(feature = "hash-sha2")]
     /// A SHA512 hash value.
@@ -315,6 +315,12 @@ impl Display for GeneralHash {
         }
 
         write!(f, "{}", hex)
+    }
+}
+
+impl Debug for GeneralHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 

@@ -45,7 +45,7 @@ pub struct HashTreeFileHeader {
 }
 
 /// HashTreeFile entry type. Describes the type of file.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Hash, Eq)]
 pub enum HashTreeFileEntryTypeV1 {
     /// A file.
     File,

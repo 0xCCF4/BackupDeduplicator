@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// The settings for the build command.
 ///
 /// # Fields
-/// * `directory` - The directory to build.
+/// * `directory` - The directories to build hash tree for.
 /// * `into_archives` - Whether to traverse into archives.
 /// * `follow_symlinks` - Whether to follow symlinks when traversing the file system.
 /// * `output` - The output file to write the hash tree to.
@@ -22,8 +22,8 @@ use std::sync::Arc;
 /// * `hash_type` - The hash algorithm to use for hashing files.
 /// * `continue_file` - Whether to continue an existing hash tree file.
 pub struct BuildSettings {
-    /// The directory to build.
-    pub directory: PathBuf,
+    /// The directory to build hash tree for.
+    pub directory: Vec<PathBuf>,
     /// Whether to traverse into archives.
     pub into_archives: bool,
     /// Whether to follow symlinks when traversing the file system.
@@ -134,31 +134,33 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
 
     let pool: ThreadPool<BuildJob, JobResult> = ThreadPool::new(args, worker_run);
 
-    let root_file = FilePath::from_realpath(build_settings.directory);
-    let root_job = BuildJob::new(None, root_file);
+    for root_file in build_settings.directory.iter() {
+        let root_file = FilePath::from_realpath(root_file);
+        let root_job = BuildJob::new(None, root_file);
 
-    pool.publish(root_job);
+        pool.publish(root_job);
 
-    while let Ok(result) = pool.receive() {
-        let finished;
-        let result = match result {
-            JobResult::Intermediate(inner) => {
-                finished = false;
-                inner
+        while let Ok(result) = pool.receive() {
+            let finished;
+            let result = match result {
+                JobResult::Intermediate(inner) => {
+                    finished = false;
+                    inner
+                }
+                JobResult::Final(inner) => {
+                    finished = true;
+                    inner
+                }
+            };
+
+            if !result.already_cached {
+                let entry = HashTreeFileEntryRef::from(&result.content);
+                save_file.write_entry_ref(&entry)?;
             }
-            JobResult::Final(inner) => {
-                finished = true;
-                inner
+
+            if finished {
+                break;
             }
-        };
-
-        if !result.already_cached {
-            let entry = HashTreeFileEntryRef::from(&result.content);
-            save_file.write_entry_ref(&entry)?;
-        }
-
-        if finished {
-            break;
         }
     }
 

@@ -2,12 +2,14 @@ use backup_deduplicator::hash::GeneralHashType;
 use backup_deduplicator::stages::analyze::cmd::AnalysisSettings;
 use backup_deduplicator::stages::build::cmd::BuildSettings;
 use backup_deduplicator::stages::clean::cmd::CleanSettings;
-use backup_deduplicator::stages::{analyze, build, clean};
+use backup_deduplicator::stages::{analyze, build, clean, dedup};
 use backup_deduplicator::utils;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, trace, LevelFilter};
 use std::env;
+use std::path::PathBuf;
 use std::str::FromStr;
+use backup_deduplicator::stages::dedup::golden_model::cmd::DedupGoldenModelSettings;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -35,7 +37,7 @@ enum Command {
     Build {
         /// The directory to analyze
         #[arg()]
-        directory: String,
+        directory: Vec<String>,
         /// Traverse into archives
         #[arg(short, long)]
         archives: bool,
@@ -89,12 +91,46 @@ enum Command {
         #[arg(short, long, default_value = "hash_tree.bdd")]
         input: String,
         /// Output file for the analysis result
-        #[arg(short, long, default_value = "analysis.json")]
+        #[arg(short, long, default_value = "analysis.bda")]
         output: String,
         /// Overwrite the output file
         #[arg(long = "overwrite", default_value = "false")]
         overwrite: bool,
     },
+    /// Compile a list of actions to deduplicate the file tree
+    Dedup {
+        /// The input analysis file to generation actions for.
+        #[arg(short, long, default_value = "analysis.bda")]
+        input: String,
+        /// The output actions file to write the actions to.
+        #[arg(short, long, default_value = "actions.bdc")]
+        output: String,
+        /// Overwrite the output file, if set it already exists 
+        #[arg(long = "overwrite", default_value = "false")]
+        overwrite: bool,
+        /// Deduplication mode and settings
+        #[command(subcommand)]
+        mode: DedupMode,
+    }
+}
+
+#[derive(Subcommand, Debug)]
+enum DedupMode {
+    /// In golden model mode, a directory is declared that serves as reference model.
+    /// Files from within the reference model are not altered. A list of other directories
+    /// can be given; from within those directories all files that have a duplicate in the reference model
+    /// are marked for deletion.
+    /// 
+    /// This mode is useful if having multiple backups of the same data. If you would like to quickly
+    /// remove files from older backups that are also present in the newer one.
+    GoldenModel {
+        /// The reference model directory
+        #[arg(short, long)]
+        reference_model: String,
+        /// The directories to delete files from.
+        #[arg(short, long)]
+        directories: Vec<String>,
+    }
 }
 
 fn main() {
@@ -155,10 +191,10 @@ fn main() {
 
             // Convert to paths and check if they exist
 
-            let directory = utils::main::parse_path(
+            let directory = directory.into_iter().map(|directory| utils::main::parse_path(
                 directory.as_str(),
                 utils::main::ParsePathKind::AbsoluteNonExisting,
-            );
+            )).collect::<Vec<PathBuf>>();
             let output = utils::main::parse_path(
                 output.as_str(),
                 utils::main::ParsePathKind::AbsoluteNonExisting,
@@ -167,8 +203,8 @@ fn main() {
                 utils::main::parse_path(w.as_str(), utils::main::ParsePathKind::AbsoluteNonExisting)
             });
 
-            if !directory.exists() {
-                eprintln!("Target directory does not exist: {}", directory.display());
+            if let Some(dir) = directory.iter().find(|dir| !dir.exists()) {
+                eprintln!("Target directory does not exist: {}", dir.display());
                 std::process::exit(exitcode::CONFIG);
             }
 
@@ -198,12 +234,12 @@ fn main() {
 
             // Convert paths to relative path to working directory
 
-            let directory = directory.strip_prefix(&working_directory).unwrap_or_else(|_| {
+            let directory = directory.into_iter().map(|dir| dir.strip_prefix(&working_directory).unwrap_or_else(|_| {
                 eprintln!("IO error, could not resolve target directory relative to working directory");
                 std::process::exit(exitcode::CONFIG);
-            });
+            }).to_path_buf()).collect::<Vec<PathBuf>>();
 
-            info!("Target directory: {:?}", directory);
+            info!("Target directories: {:?}", directory);
             // info!("Archives: {:?}", archives);
             info!("Follow symlinks: {:?}", follow_symlinks);
             info!("Output: {:?}", output);
@@ -213,7 +249,7 @@ fn main() {
             // Run the command
 
             match build::cmd::run(BuildSettings {
-                directory: directory.to_path_buf(),
+                directory,
                 into_archives: archives,
                 follow_symlinks,
                 output: output.clone(),
@@ -342,6 +378,54 @@ fn main() {
                 Err(e) => {
                     eprintln!("Error: {:?}", e);
                     std::process::exit(exitcode::SOFTWARE);
+                }
+            }
+        }
+        Command::Dedup {
+            mode,
+            input,
+            output,
+            overwrite,
+        } => {
+            let input = utils::main::parse_path(
+                input.as_str(),
+                utils::main::ParsePathKind::AbsoluteExisting,
+            );
+            let output = utils::main::parse_path(
+                output.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
+
+            if !input.exists() {
+                eprintln!("Input file does not exist: {:?}", input);
+                std::process::exit(exitcode::CONFIG);
+            }
+
+            if output.exists() && !overwrite {
+                eprintln!(
+                    "Output file already exists: {:?}. Set --overwrite to override its content",
+                    output
+                );
+                std::process::exit(exitcode::CONFIG);
+            }
+
+            match mode {
+                DedupMode::GoldenModel { reference_model, directories } => {
+                    match dedup::golden_model::cmd::run(DedupGoldenModelSettings {
+                        input,
+                        output,
+                        reference_model,
+                        directories,
+                    }) {
+                        Ok(_) => {
+                            info!("Dedup command completed successfully");
+                            std::process::exit(exitcode::OK);
+                        }
+                        Err(e) => {
+                            eprintln!("Error: {:?}", e);
+                            std::process::exit(exitcode::SOFTWARE);
+                        }
+                    }
                 }
             }
         }
