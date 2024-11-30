@@ -2,6 +2,9 @@ use backup_deduplicator::hash::GeneralHashType;
 use backup_deduplicator::stages::analyze::cmd::AnalysisSettings;
 use backup_deduplicator::stages::build::cmd::BuildSettings;
 use backup_deduplicator::stages::clean::cmd::CleanSettings;
+use backup_deduplicator::stages::dedup::golden_model::cmd::{
+    DedupGoldenModelSettings, MatchingModel,
+};
 use backup_deduplicator::stages::{analyze, build, clean, dedup};
 use backup_deduplicator::utils;
 use clap::{arg, Parser, Subcommand};
@@ -9,7 +12,6 @@ use log::{debug, info, trace, LevelFilter};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
-use backup_deduplicator::stages::dedup::golden_model::cmd::DedupGoldenModelSettings;
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -105,13 +107,13 @@ enum Command {
         /// The output actions file to write the actions to.
         #[arg(short, long, default_value = "actions.bdc")]
         output: String,
-        /// Overwrite the output file, if set it already exists 
+        /// Overwrite the output file, if set it already exists
         #[arg(long = "overwrite", default_value = "false")]
         overwrite: bool,
         /// Deduplication mode and settings
         #[command(subcommand)]
         mode: DedupMode,
-    }
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -120,17 +122,20 @@ enum DedupMode {
     /// Files from within the reference model are not altered. A list of other directories
     /// can be given; from within those directories all files that have a duplicate in the reference model
     /// are marked for deletion.
-    /// 
+    ///
     /// This mode is useful if having multiple backups of the same data. If you would like to quickly
     /// remove files from older backups that are also present in the newer one.
     GoldenModel {
         /// The reference model directory
         #[arg(short, long)]
         reference_model: String,
+        /// The matching model to use for deduplication.
+        #[arg(short, long, default_value = "plain")]
+        matching_model: MatchingModel,
         /// The directories to delete files from.
         #[arg(short, long)]
         directories: Vec<String>,
-    }
+    },
 }
 
 fn main() {
@@ -191,10 +196,15 @@ fn main() {
 
             // Convert to paths and check if they exist
 
-            let directory = directory.into_iter().map(|directory| utils::main::parse_path(
-                directory.as_str(),
-                utils::main::ParsePathKind::AbsoluteNonExisting,
-            )).collect::<Vec<PathBuf>>();
+            let directory = directory
+                .into_iter()
+                .map(|directory| {
+                    utils::main::parse_path(
+                        directory.as_str(),
+                        utils::main::ParsePathKind::AbsoluteNonExisting,
+                    )
+                })
+                .collect::<Vec<PathBuf>>();
             let output = utils::main::parse_path(
                 output.as_str(),
                 utils::main::ParsePathKind::AbsoluteNonExisting,
@@ -410,11 +420,16 @@ fn main() {
             }
 
             match mode {
-                DedupMode::GoldenModel { reference_model, directories } => {
+                DedupMode::GoldenModel {
+                    reference_model,
+                    matching_model,
+                    directories,
+                } => {
                     match dedup::golden_model::cmd::run(DedupGoldenModelSettings {
                         input,
                         output,
                         reference_model,
+                        matching_model,
                         directories,
                     }) {
                         Ok(_) => {

@@ -1,4 +1,3 @@
-
 /// Contains the output data structures for the dedup stage.
 pub mod output {
     mod actions;

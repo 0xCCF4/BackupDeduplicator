@@ -47,7 +47,12 @@ impl From<&DupSetEntryRef<'_, '_, '_>> for DupSetEntry {
             ftype: *entry.ftype,
             size: entry.size,
             hash: entry.hash.clone(),
-            conflicting: entry.conflicting.clone().into_iter().cloned().collect::<Vec<FilePath>>(),
+            conflicting: entry
+                .conflicting
+                .clone()
+                .into_iter()
+                .cloned()
+                .collect::<Vec<FilePath>>(),
         }
     }
 }
@@ -60,24 +65,28 @@ pub enum DupSetFileVersion {
 }
 
 /// Deduplication set file.
-/// 
+///
 /// # Fields
 /// * `version` - The version of the file format.
 /// * `entries` - The deduplication set entries.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DupSetFile {
+    /// The version of the file format.
     pub version: DupSetFileVersion,
+    /// The deduplication set entries.
     pub entries: Vec<DupSetEntry>,
 }
 
 /// Deduplication set file. (Reference version)
-/// 
+///
 /// # Fields
 /// * `version` - The version of the file format.
 /// * `entries` - The deduplication set entries.
 #[derive(Debug, Serialize)]
 pub struct DupSetFileRef<'a, 'b, 'c> {
+    /// The version of the file format.
     pub version: DupSetFileVersion,
+    /// The deduplication set entries.
     pub entries: Vec<DupSetEntryRef<'a, 'b, 'c>>,
 }
 
@@ -85,7 +94,11 @@ impl From<&DupSetFileRef<'_, '_, '_>> for DupSetFile {
     fn from(value: &DupSetFileRef<'_, '_, '_>) -> Self {
         DupSetFile {
             version: value.version,
-            entries: value.entries.iter().map(DupSetEntry::from).collect::<Vec<DupSetEntry>>(),
+            entries: value
+                .entries
+                .iter()
+                .map(DupSetEntry::from)
+                .collect::<Vec<DupSetEntry>>(),
         }
     }
 }

@@ -12,19 +12,19 @@ The tool is run in four stages:
 │  Folder   ├──┘ └────┬┬────┘  └┬────────────────┘                 
 │   -file   │         ││        │                                  
 │   -file   │ ┌───────┼┼────────┘                                  
-└───┬────┬──┘ │       ││                                           
-    │    │    │  ┌────▼▼────┐  ┌─────────────────┐                 
-    │    │    │  │          │  │                 │                 
-    │    │    └──► Analyze  ├──► Duplicate Sets  │                 
-    │    │       │          │  │                 │                 
-    │    │       └────┬┬────┘  └┬────────────────┘                 
-    │    │            ││        │      Basic functionality complete
-----│----│----┌───────┼┼────────┘----------------------------------
-    │    │    │       ││                 Implementation in progress
-    │    │    │  ┌────▼▼────┐  ┌─────────────────┐                 
-    │    │    └──►          │  │                 │                 
-    │    │       │  Dedup   ├──► Change commands │                 
-    │    └───────►          │  │                 │                 
+└───┬───────┘ │       ││                                           
+    │         │  ┌────▼▼────┐  ┌─────────────────┐                 
+    │         │  │          │  │                 │                 
+    │         └──► Analyze  ├──► Duplicate Sets  │                 
+    │            │          │  │                 │                 
+    │            └────┬┬────┘  └┬────────────────┘                 
+    │                 ││        │                                  
+    │         ┌───────┼┼────────┘                                  
+    │         │       ││                                           
+    │         │  ┌────▼▼────┐  ┌─────────────────┐                 
+    │         │  |          │  │                 │                 
+    │         └──►  Dedup   ├──► Change commands │                 
+    │            |          │  │                 │                 
     │            └────┬┬────┘  └┬────────────────┘                 
     │                 ││        │                                  
     │         ┌───────┼┼────────┘                                  
@@ -38,10 +38,7 @@ The tool is run in four stages:
 1. **Build**: The tools reads a folder and builds a hash tree of all files in it.
 2. **Analyze**: The tool analyzes the hash tree and finds duplicate files.
 3. **Dedup**: The tool determine which steps to take to deduplicate the files.
-This can be done in a half automatic or manual way.
 4. **Execute**: The tool executes the deduplication steps (Deleting/Hardlinking/...).
-
-**Dedup** and **Execute** are in development and currently not (fully) implemented.
 
 ## Build
 * Input: Folder with files, Hashtree (optional) to update or continue from.
@@ -79,28 +76,36 @@ The `clean` command can also be run manually.
   single-threaded duplication detection.
 
 ### Analysis results
-The analysis results are stored in a file with the following format:
+The analysis results are stored in a file with the following JSON format:
 ```plain
-[ENTRY] [newline]
-[ENTRY] [newline]
-...
+{
+  "version": "V1",
+  "entries": [
+      ENTRY,
+      ENTRY,
+      ...
+  ]
+}
 ```
-See `ResultEntry` for the exact format of an entry. In short, it contains (JSON)
+
+
+See `DupSetEntry` for the exact format of an entry. In short, it contains (JSON)
 * File type
 * Hash
-* Size (0 if it is a directory, else the file size of one of the files)
+* Size (if it is a directory: number of children, else the file size of one of the files)
 * Conflicting Set (a set of all files that are duplicates of each other)
 
 ## Dedup
 * Input: Duplicate sets
-* Output: Set of commands to execute to deduplicate the files
-* Execution: Manual or half-automatic, user interaction required.
+* Output: Required actions to deduplicate the files
+* Execution: Fully automatic, no user interaction required.
 
-Implementation in progress. To the current date the duplicate sets
-must be manually processed.
+Currently, there is just one deduplication strategy implemented: 
+* **golden model**: delete all files outside of the "golden" directory that are also contained
+withing the golden directory.
 
 ## Execute
-* Input: Set of commands
+* Input: Set of dedup actions
 * Output: Deduplicated files
 * Execution: Fully automatic, user interaction only on errors.
 

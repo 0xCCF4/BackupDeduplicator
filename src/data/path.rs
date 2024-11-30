@@ -144,6 +144,22 @@ impl FilePath {
         result
     }
 
+    /// Gets the first component of the file path.
+    ///
+    /// # Returns
+    /// The first component of the file path. None if the file path is empty.
+    pub fn first_component(&self) -> Option<&PathBuf> {
+        self.path.first()
+    }
+
+    /// Gets the first component of the file path.
+    ///
+    /// # Returns
+    /// The first component of the file path. None if the file path is empty.
+    pub fn first_component_mut(&mut self) -> Option<&mut PathBuf> {
+        self.path.first_mut()
+    }
+
     /// Gets the last component of the file path.
     ///
     /// # Returns

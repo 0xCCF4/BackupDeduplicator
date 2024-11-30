@@ -185,31 +185,31 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         "There are {} GB of duplicated files",
         duplicated_bytes / 1024 / 1024 / 1024
     );
-    
+
     drop(output_buf_writer);
-    
+
     let output_file_reader = match input_file_options.open(&analysis_settings.output) {
         Ok(file) => file,
         Err(err) => {
             return Err(anyhow!("Failed to open output file readable: {}", err));
         }
     };
-    
+
     let mut output_buf_reader = std::io::BufReader::new(&output_file_reader);
     let mut text = String::new();
-    
+
     if let Err(err) = output_buf_reader.read_to_string(&mut text) {
         return Err(anyhow!("Failed to read output file: {}", err));
     }
-    
+
     drop(output_buf_reader);
-    
+
     let mut result = DupSetFile {
         version: DupSetFileVersion::V1,
         entries: Vec::new(),
     };
     for line in text.lines() {
-        let entry = match serde_json::from_str(&line) {
+        let entry = match serde_json::from_str(line) {
             Ok(entry) => entry,
             Err(err) => {
                 error!("Failed to parse line in output: {}", err);
@@ -226,11 +226,11 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         }
     };
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
-    
+
     if let Err(err) = serde_json::to_writer(&mut output_buf_writer, &result) {
         return Err(anyhow!("Failed to write output file: {}", err));
     }
-    
+
     if let Err(err) = output_buf_writer.flush() {
         return Err(anyhow!("Failed to flush output file: {}", err));
     }

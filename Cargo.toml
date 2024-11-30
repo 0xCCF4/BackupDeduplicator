@@ -34,6 +34,7 @@ tar = {  version = "0.4.40", optional = true }
 zip = { git = "https://github.com/0xCCF4/zip2", branch = "feature-read-from-seekable-stream", optional = true, features = ["chrono"] }
 chrono = { version = "0.4.38", optional = true }
 rand = "0.8.5"
+regex = "1.10.5"
 
 [features]
 hash-sha1 = ["dep:sha1"]
