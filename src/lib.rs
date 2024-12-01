@@ -20,6 +20,8 @@ pub mod stages {
     pub mod clean;
     /// Contains the implementation of the dedup command.
     pub mod dedup;
+    /// Contains the implementation of the execute command.
+    pub mod execute;
 }
 
 mod data {

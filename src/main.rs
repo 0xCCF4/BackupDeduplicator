@@ -5,13 +5,14 @@ use backup_deduplicator::stages::clean::cmd::CleanSettings;
 use backup_deduplicator::stages::dedup::golden_model::cmd::{
     DedupGoldenModelSettings, MatchingModel,
 };
-use backup_deduplicator::stages::{analyze, build, clean, dedup};
+use backup_deduplicator::stages::{analyze, build, clean, dedup, execute};
 use backup_deduplicator::utils;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, trace, LevelFilter};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
+use backup_deduplicator::stages::execute::cmd::{ExecuteAction, ExecuteActionType, ExecuteSettings};
 
 /// A simple command line tool to deduplicate backups.
 #[derive(Parser, Debug)]
@@ -114,6 +115,24 @@ enum Command {
         #[command(subcommand)]
         mode: DedupMode,
     },
+    /// Execute a list of actions to deduplicate the file tree
+    Execute {
+        /// The input actions file to execute.
+        #[arg(short, long, default_value = "actions.bdc")]
+        input: String,
+        /// Dry-run mode, no file changes are made. Actions taken are outputted to the console.
+        #[arg(long, short = 'n')]
+        dry_run: bool,
+        /// Action to be taken. "delete" deletes duplicates, "move" moves duplicates into a subfolder specified using "--move-folder".
+        #[arg(long, short)]
+        action: ExecuteActionType,
+        /// When using the move action: The folder name to move duplicates to.
+        #[arg(long = "move-folder", default_value = "__DEDUP__")]
+        move_folder_name: String,
+        /// The root folders/files from the analysis
+        #[arg()]
+        files: Vec<String>,
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -441,6 +460,51 @@ fn main() {
                             std::process::exit(exitcode::SOFTWARE);
                         }
                     }
+                }
+            }
+        },
+        Command::Execute {
+            action,
+            files,
+            dry_run,
+            move_folder_name,
+            input
+        } => {
+            let input = utils::main::parse_path(
+                input.as_str(),
+                utils::main::ParsePathKind::AbsoluteExisting,
+            );
+
+            if !input.exists() {
+                eprintln!("Input file does not exist: {:?}", input);
+                std::process::exit(exitcode::CONFIG);
+            }
+            
+            let files = files.into_iter().map(|file| {
+                utils::main::parse_path(
+                    file.as_str(),
+                    utils::main::ParsePathKind::AbsoluteExisting,
+                )
+            }).collect::<Vec<PathBuf>>();
+            
+            match execute::cmd::run(ExecuteSettings {
+                dry_run,
+                action: match action {
+                    ExecuteActionType::DeleteDuplicates => ExecuteAction::DeleteDuplicates,
+                    ExecuteActionType::MoveDuplicates => ExecuteAction::MoveDuplicates {
+                        folder_name: move_folder_name,
+                    }
+                },
+                files,
+                input
+            }) {
+                Ok(_) => {
+                    info!("Execute command completed successfully");
+                    std::process::exit(exitcode::OK);
+                }
+                Err(e) => {
+                    eprintln!("Error: {:?}", e);
+                    std::process::exit(exitcode::SOFTWARE);
                 }
             }
         }

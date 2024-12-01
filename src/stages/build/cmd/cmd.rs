@@ -33,7 +33,6 @@ pub struct BuildSettings {
     // pub absolute_paths: bool,
     /// The number of threads to use for building the hash tree. None = number of logical CPUs.
     pub threads: Option<usize>,
-
     /// The hash algorithm to use for hashing files.
     pub hash_type: GeneralHashType,
     /// Whether to continue an existing hash tree file.
