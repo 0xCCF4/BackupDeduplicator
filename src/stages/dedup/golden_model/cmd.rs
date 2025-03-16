@@ -1,11 +1,11 @@
 use crate::path::FilePath;
-use crate::stages::analyze::output::DupSetFile;
+use crate::stages::analyze::output::{ConflictingEntry, DupSetFile};
 use crate::stages::build::output::HashTreeFileEntryType;
 use crate::stages::dedup::output::{
     DeduplicationAction, DeduplicationActionVersion, DeduplicationActions,
 };
 use anyhow::{anyhow, Result};
-use log::warn;
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -139,21 +139,21 @@ pub fn run(dedup_settings: DedupGoldenModelSettings) -> Result<()> {
         let reference_files = entry
             .conflicting
             .iter()
-            .filter(|path| {
-                if let Some(component) = path.first_component() {
+            .filter(|entry| {
+                if let Some(component) = entry.path.first_component() {
                     golden_directory.matches(component.to_string_lossy().as_ref())
                 } else {
                     false
                 }
             })
-            .collect::<Vec<&FilePath>>();
+            .collect::<Vec<&ConflictingEntry>>();
 
         let other_files = entry
             .conflicting
             .iter()
-            .filter(|path| !reference_files.contains(path))
-            .filter(|path| {
-                if let Some(component) = path.first_component() {
+            .filter(|entry| !reference_files.contains(entry))
+            .filter(|entry| {
+                if let Some(component) = entry.path.first_component() {
                     other_directories
                         .iter()
                         .any(|v| v.matches(component.to_string_lossy().as_ref()))
@@ -161,13 +161,13 @@ pub fn run(dedup_settings: DedupGoldenModelSettings) -> Result<()> {
                     false
                 }
             })
-            .collect::<Vec<&FilePath>>();
+            .collect::<Vec<&ConflictingEntry>>();
 
         let remaining_duplicates = entry
             .conflicting
             .iter()
             .filter(|p| reference_files.contains(p) || !other_files.contains(p))
-            .collect::<Vec<&FilePath>>();
+            .collect::<Vec<&ConflictingEntry>>();
 
         if !reference_files.is_empty() && !other_files.is_empty() {
             // delete
@@ -175,26 +175,28 @@ pub fn run(dedup_settings: DedupGoldenModelSettings) -> Result<()> {
                 match entry.ftype {
                     HashTreeFileEntryType::File | HashTreeFileEntryType::Symlink => {
                         result.actions.push(DeduplicationAction::RemoveFile {
-                            path: file.clone(),
+                            path: file.path.clone(),
                             hash: entry.hash.clone(),
                             remaining_duplicates: remaining_duplicates
                                 .clone()
                                 .into_iter()
-                                .cloned()
+                                .map(|p| p.path.clone())
                                 .collect::<Vec<FilePath>>(),
                             size: entry.size,
+                            modification_time: file.modified,
                         });
                     }
                     HashTreeFileEntryType::Directory => {
                         result.actions.push(DeduplicationAction::RemoveDirectory {
-                            path: file.clone(),
+                            path: file.path.clone(),
                             hash: entry.hash.clone(),
                             remaining_duplicates: remaining_duplicates
                                 .clone()
                                 .into_iter()
-                                .cloned()
+                                .map(|p| p.path.clone())
                                 .collect::<Vec<FilePath>>(),
                             children: entry.size,
+                            modification_time: file.modified,
                         });
                     }
                     HashTreeFileEntryType::Other => {

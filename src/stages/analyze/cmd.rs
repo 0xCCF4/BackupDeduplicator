@@ -1,7 +1,9 @@
 use crate::hash::{GeneralHash, GeneralHashType};
 use crate::pool::ThreadPool;
 use crate::stages::analyze::intermediary_analysis_data::AnalysisFile;
-use crate::stages::analyze::output::{DupSetEntryRef, DupSetFile, DupSetFileVersion};
+use crate::stages::analyze::output::{
+    ConflictingEntryRef, DupSetEntryRef, DupSetFile, DupSetFileVersion,
+};
 use crate::stages::analyze::worker::AnalysisIntermediaryFile;
 use crate::stages::analyze::worker::{
     worker_run, AnalysisJob, AnalysisResult, AnalysisWorkerArgument,
@@ -288,7 +290,10 @@ fn write_result_entry(
 
         let mut conflicting = Vec::with_capacity(set.1.len());
         for file in set.1 {
-            conflicting.push(&file.path);
+            conflicting.push(ConflictingEntryRef {
+                path: &file.path,
+                modified: file.modified,
+            });
         }
 
         let result = DupSetEntryRef {

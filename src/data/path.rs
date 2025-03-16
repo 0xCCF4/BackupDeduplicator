@@ -298,6 +298,10 @@ impl FilePath {
             }),
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
 }
 
 impl std::fmt::Display for FilePath {

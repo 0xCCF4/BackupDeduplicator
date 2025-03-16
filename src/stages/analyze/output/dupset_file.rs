@@ -19,7 +19,28 @@ pub struct DupSetEntryRef<'a, 'b, 'c> {
     /// The hash of the file content.
     pub hash: &'b GeneralHash,
     /// The conflicting files.
-    pub conflicting: Vec<&'c FilePath>,
+    pub conflicting: Vec<ConflictingEntryRef<'c>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConflictingEntry {
+    pub path: FilePath,
+    pub modified: u64,
+}
+
+impl From<ConflictingEntryRef<'_>> for ConflictingEntry {
+    fn from(entry: ConflictingEntryRef) -> Self {
+        ConflictingEntry {
+            path: entry.path.clone(),
+            modified: entry.modified,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ConflictingEntryRef<'a> {
+    pub path: &'a FilePath,
+    pub modified: u64,
 }
 
 /// The result of the analysis worker. A duplicate set entry.
@@ -38,7 +59,7 @@ pub struct DupSetEntry {
     /// The hash of the file content.
     pub hash: GeneralHash,
     /// The conflicting files.
-    pub conflicting: Vec<FilePath>,
+    pub conflicting: Vec<ConflictingEntry>,
 }
 
 impl From<&DupSetEntryRef<'_, '_, '_>> for DupSetEntry {
@@ -51,8 +72,8 @@ impl From<&DupSetEntryRef<'_, '_, '_>> for DupSetEntry {
                 .conflicting
                 .clone()
                 .into_iter()
-                .cloned()
-                .collect::<Vec<FilePath>>(),
+                .map(ConflictingEntry::from)
+                .collect::<Vec<ConflictingEntry>>(),
         }
     }
 }

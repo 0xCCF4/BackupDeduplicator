@@ -1,6 +1,7 @@
 use crate::copy_stream::BufferCopyStreamReader;
 use crate::utils;
 use anyhow::{anyhow, Result};
+#[cfg(feature = "archive-zip")]
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};

@@ -24,7 +24,7 @@ pub struct DeduplicationActions {
 
 /// An actions to be taken to deduplicate files.
 /// It can be assumed that the remaining duplicates are not removed.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum DeduplicationAction {
     /// Remove a file.
     RemoveFile {
@@ -38,6 +38,8 @@ pub enum DeduplicationAction {
         hash: GeneralHash,
         /// Size of the file to remove.
         size: u64,
+        /// Last modification time
+        modification_time: u64,
     },
     /// Remove a directory.
     RemoveDirectory {
@@ -51,5 +53,35 @@ pub enum DeduplicationAction {
         hash: GeneralHash,
         /// Number of children
         children: u64,
+        /// Last modification time
+        modification_time: u64,
     },
+}
+
+impl DeduplicationAction {
+    pub fn path(&self) -> &FilePath {
+        match self {
+            DeduplicationAction::RemoveFile { path, .. } => path,
+            DeduplicationAction::RemoveDirectory { path, .. } => path,
+        }
+    }
+    pub fn remaining_duplicates(&self) -> &[FilePath] {
+        match self {
+            DeduplicationAction::RemoveFile {
+                remaining_duplicates,
+                ..
+            } => remaining_duplicates,
+            DeduplicationAction::RemoveDirectory {
+                remaining_duplicates,
+                ..
+            } => remaining_duplicates,
+        }
+    }
+
+    pub fn hash(&self) -> &GeneralHash {
+        match self {
+            DeduplicationAction::RemoveFile { hash, .. } => hash,
+            DeduplicationAction::RemoveDirectory { hash, .. } => hash,
+        }
+    }
 }
