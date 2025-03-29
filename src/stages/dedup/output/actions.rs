@@ -84,4 +84,18 @@ impl DeduplicationAction {
             DeduplicationAction::RemoveDirectory { hash, .. } => hash,
         }
     }
+    
+    pub fn size(&self) -> u64 {
+        match self {
+            DeduplicationAction::RemoveFile { size, .. } => *size,
+            DeduplicationAction::RemoveDirectory { children, .. } => *children,
+        }
+    }
+    
+    pub fn modification_time(&self) -> u64 {
+        match self {
+            DeduplicationAction::RemoveFile { modification_time, .. } => *modification_time,
+            DeduplicationAction::RemoveDirectory { modification_time, .. } => *modification_time,
+        }
+    }
 }
