@@ -102,9 +102,9 @@ dependencies = [
 
 [[package]]
 name = "block-buffer"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a229bfd78e4827c91b9b95784f69492c1b77c1ab75a45a8a037b139215086f94"
+checksum = "e9ef36a6fcdb072aa548f3da057640ec10859eb4e91ddf526ee648d50c76a949"
 dependencies = [
  "hybrid-array",
 ]
@@ -208,9 +208,9 @@ dependencies = [
 
 [[package]]
 name = "crypto-common"
-version = "0.2.0-rc.3"
+version = "0.2.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a23fa214dea9efd4dacee5a5614646b30216ae0f05d4bb51bafb50e9da1c5be"
+checksum = "6a8235645834fbc6832939736ce2f2d08192652269e11010a6240f61b908a1c6"
 dependencies = [
  "hybrid-array",
 ]
@@ -227,13 +227,13 @@ dependencies = [
 
 [[package]]
 name = "digest"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "460dd7f37e4950526b54a5a6b1f41b6c8e763c58eb9a8fc8fc05ba5c2f44ca7b"
+checksum = "3a4aae35a0fcbe22ff1be50fe96df72002d5a4a6fb4aae9193cf2da0daa36da2"
 dependencies = [
- "block-buffer 0.11.0-rc.4",
+ "block-buffer 0.11.0-rc.5",
  "const-oid",
- "crypto-common 0.2.0-rc.3",
+ "crypto-common 0.2.0-rc.4",
 ]
 
 [[package]]
@@ -316,9 +316,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hybrid-array"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dab50e193aebe510fe0e40230145820e02f48dae0cf339ea4204e6e708ff7bd"
+checksum = "6fe39a812f039072707ce38020acbab2f769087952eddd9e2b890f37654b2349"
 dependencies = [
  "typenum",
 ]
@@ -464,13 +464,13 @@ dependencies = [
 
 [[package]]
 name = "sha1"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f9318facddf9ac32a33527066936837e189b3f23ced6edc1603720ead5e2b3d"
+checksum = "c5e046edf639aa2e7afb285589e5405de2ef7e61d4b0ac1e30256e3eab911af9"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.0",
+ "digest 0.11.0-rc.1",
 ]
 
 [[package]]
