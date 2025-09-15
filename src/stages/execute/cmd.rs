@@ -1,9 +1,8 @@
-use crate::stages::dedup::output::{DeduplicationAction, DeduplicationActions};
+use crate::stages::dedup::output::DeduplicationActions;
 use anyhow::{anyhow, Result};
 use log::{debug, error, warn};
 use std::collections::HashMap;
-use std::{error, fs};
-use std::ffi::OsStr;
+use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::SystemTime;
@@ -102,7 +101,7 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
 
     debug!("Starting action phase...");
 
-    'action: for action in &file.actions {
+    for action in &file.actions {
         if action.path().len() != 1 {
             warn!(
                 "Currently only non-archive files are supported: {:?}",
@@ -113,12 +112,23 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
 
         if let Some(resolved_path) = map_folders.get(action) {
             if action.remaining_duplicates().is_empty() {
-                error!("Tried to delete all the duplicates of a file: {:?}. Skipped!", action.path());
+                error!(
+                    "Tried to delete all the duplicates of a file: {:?}. Skipped!",
+                    action.path()
+                );
                 continue;
             }
-            untouchable_files.extend(action.remaining_duplicates().iter().filter_map(|v|v.first_component()));
+            untouchable_files.extend(
+                action
+                    .remaining_duplicates()
+                    .iter()
+                    .filter_map(|v| v.first_component()),
+            );
             if untouchable_files.contains(&resolved_path) {
-                error!("Tried to delete a file that was marked as untouchable: {:?}. Skipped!", resolved_path);
+                error!(
+                    "Tried to delete a file that was marked as untouchable: {:?}. Skipped!",
+                    resolved_path
+                );
                 continue;
             }
 
@@ -130,18 +140,24 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
             let metadata = match fs::metadata(resolved_path) {
                 Ok(metadata) => metadata,
                 Err(err) => {
-                    error!("Failed to get metadata of file: {:?}. Error: {}", resolved_path, err);
+                    error!(
+                        "Failed to get metadata of file: {:?}. Error: {}",
+                        resolved_path, err
+                    );
                     continue;
                 }
             };
             let file_size = if resolved_path.is_dir() {
-                    let children = match fs::read_dir(resolved_path) {
-                        Err(err) => {
-                            error!("Failed to read directory: {:?}. Error: {}", resolved_path, err);
-                            continue;
-                        }
-                        Ok(metadata) => metadata,
-                    };
+                let children = match fs::read_dir(resolved_path) {
+                    Err(err) => {
+                        error!(
+                            "Failed to read directory: {:?}. Error: {}",
+                            resolved_path, err
+                        );
+                        continue;
+                    }
+                    Ok(metadata) => metadata,
+                };
                 children.count() as u64
             } else {
                 metadata.len()
@@ -151,12 +167,15 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                 .map(|time| {
                     time.duration_since(SystemTime::UNIX_EPOCH)
                         .or(Err(anyhow!(
-                    "Unable to convert modified date to UNIX_EPOCH"
-                )))
+                            "Unable to convert modified date to UNIX_EPOCH"
+                        )))
                         .map(|duration| duration.as_secs())
                 })
                 .unwrap_or_else(|err| {
-                    error!("Error while reading modified date {:?}: {:?}", resolved_path, err);
+                    error!(
+                        "Error while reading modified date {:?}: {:?}",
+                        resolved_path, err
+                    );
                     Ok(0)
                 });
 
@@ -169,7 +188,12 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
             };
 
             if file_size != action.size() {
-                println!("Size mismatch: {:?} {}->{}", resolved_path, action.size(), file_size);
+                println!(
+                    "Size mismatch: {:?} {}->{}",
+                    resolved_path,
+                    action.size(),
+                    file_size
+                );
                 if resolved_path.is_dir() {
                     let children = fs::read_dir(resolved_path).unwrap();
                     for child in children {
@@ -185,7 +209,10 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                 warn!("Modification time mismatch: {:?}", resolved_path);
             }
 
-            if resolved_path.iter().any(|component|component.to_string_lossy() == ".git") {
+            if resolved_path
+                .iter()
+                .any(|component| component.to_string_lossy() == ".git")
+            {
                 debug!("Skipped git file: {:?}", resolved_path);
                 continue;
             }
@@ -214,7 +241,6 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                         error!("Path is not a folder: {:?}", move_folder);
                         continue;
                     }
-
                 }
             }
         }

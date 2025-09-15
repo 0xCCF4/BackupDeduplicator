@@ -37,6 +37,8 @@ mod data {
     pub mod hash;
     /// Contains the implementation of the path data structure.
     pub mod path;
+
+    pub mod shallow_ref_tree;
 }
 
 pub use data::*;

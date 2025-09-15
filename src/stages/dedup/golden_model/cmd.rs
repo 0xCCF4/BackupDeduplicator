@@ -5,7 +5,7 @@ use crate::stages::dedup::output::{
     DeduplicationAction, DeduplicationActionVersion, DeduplicationActions,
 };
 use anyhow::{anyhow, Result};
-use log::{trace, warn};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

@@ -66,6 +66,10 @@ pub fn worker_run_directory(arguments: WorkerRunDirectoryArguments) {
         job_publish,
         arg,
     } = arguments;
+    
+    if path.to_string_lossy().contains("Soundcorset") {
+        println!("Soundcoreset: {:?}", path);
+    }
 
     trace!(
         "[{}] analyzing directory {} > {:?}",

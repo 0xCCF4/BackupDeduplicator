@@ -215,6 +215,14 @@ pub enum BuildFile {
     Stub(BuildStubInformation), // for files that are already analyzed
 }
 
+#[derive(Debug)]
+pub enum BuildFileType {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
 // ---- IMPLEMENTATION ----
 
 impl BuildFile {

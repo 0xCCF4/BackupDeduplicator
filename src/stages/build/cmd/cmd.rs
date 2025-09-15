@@ -1,15 +1,16 @@
-use crate::hash::GeneralHashType;
+use crate::hash::{GeneralHash, GeneralHashType};
 use crate::path::FilePath;
-use crate::pool::ThreadPool;
-use crate::stages::build::cmd::job::{BuildJob, JobResult};
-use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
-use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryRef};
+use crate::pool::{JobTrait, ResultTrait};
+use crate::shallow_ref_tree::NodeId;
+use crate::stages::build::cmd::archive::ArchiveFile;
+use crate::stages::build::cmd::planner::JobPlanner;
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::{fs, panic, process};
 
 /// The settings for the build command.
 ///
@@ -63,7 +64,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         result_file_options.write(true);
     }
 
-    let result_file = match result_file_options.open(build_settings.output) {
+    let result_file = match result_file_options.open(&build_settings.output) {
         Ok(file) => file,
         Err(err) => {
             return Err(anyhow!("Failed to open result file: {}", err));
@@ -117,51 +118,176 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
             Arc::into_inner(v).expect("There should be no further references to the entry"),
         );
     });
-    let file_by_hash = Arc::new(file_by_hash);
 
-    // create thread pool
+    let threads = build_settings.threads.unwrap_or_else(num_cpus::get);
 
-    let mut args = Vec::with_capacity(build_settings.threads.unwrap_or_else(num_cpus::get));
-    for _ in 0..args.capacity() {
-        args.push(WorkerArgument {
-            archives: build_settings.into_archives,
-            follow_symlinks: build_settings.follow_symlinks,
-            hash_type: build_settings.hash_type,
-            save_file_by_path: Arc::clone(&file_by_hash),
-        });
-    }
+    // panic if thread panics
+    let orig_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        orig_hook(panic_info);
+        process::exit(1);
+    }));
 
-    let pool: ThreadPool<BuildJob, JobResult> = ThreadPool::new(args, worker_run);
+    let mut planner = JobPlanner::new(threads, &build_settings);
 
     for root_file in build_settings.directory.iter() {
-        let root_file = FilePath::from_realpath(root_file);
-        let root_job = BuildJob::new(None, root_file);
-
-        pool.publish(root_job);
-
-        while let Ok(result) = pool.receive() {
-            let finished;
-            let result = match result {
-                JobResult::Intermediate(inner) => {
-                    finished = false;
-                    inner
-                }
-                JobResult::Final(inner) => {
-                    finished = true;
-                    inner
-                }
-            };
-
-            if !result.already_cached {
-                let entry = HashTreeFileEntryRef::from(&result.content);
-                save_file.write_entry_ref(&entry)?;
-            }
-
-            if finished {
-                break;
-            }
-        }
+        planner.schedule_initial_job(root_file.clone());
     }
 
+    planner.run();
+
     Ok(())
+}
+
+pub struct BuildJob {
+    pub job_id: u64,
+    pub node_id: NodeId,
+    pub data: BuildJobData,
+}
+
+impl JobTrait for BuildJob {
+    fn job_id(&self) -> u64 {
+        self.job_id
+    }
+}
+
+static JOB_ID_COUNTER: Mutex<u64> = Mutex::new(0);
+
+impl BuildJob {
+    fn new_job_id() -> u64 {
+        let mut counter = JOB_ID_COUNTER.lock().expect("Failed to lock job counter");
+        *counter += 1;
+        *counter
+    }
+    pub fn new(data: BuildJobData, owning_node: NodeId) -> Self {
+        Self {
+            job_id: BuildJob::new_job_id(),
+            node_id: owning_node,
+            data,
+        }
+    }
+    pub fn result(&self) -> JobResultBuilder {
+        JobResultBuilder {
+            job_id: self.job_id,
+            node_id: self.node_id,
+        }
+    }
+}
+
+pub struct JobResultBuilder {
+    pub job_id: u64,
+    pub node_id: NodeId,
+}
+
+impl JobResultBuilder {
+    pub fn build(self, result: JobResultData) -> JobResult {
+        JobResult {
+            job_id: self.job_id,
+            node_id: self.node_id,
+            result,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum BuildJobData {
+    DiscoverDirectory(PathBuf),
+    HashFile(PathBuf),
+    HashSymlink(PathBuf),
+    DirectoryStub(PathBuf),
+    HashDirectory {
+        path: PathBuf,
+        children: Vec<GeneralHash>,
+    },
+    Initial(PathBuf),
+}
+
+impl BuildJobData {
+    pub fn path(&self) -> &PathBuf {
+        match self {
+            BuildJobData::DiscoverDirectory(path) => path,
+            BuildJobData::DirectoryStub(path) => path,
+            BuildJobData::HashFile(path) => path,
+            BuildJobData::HashSymlink(path) => path,
+            BuildJobData::HashDirectory { path, .. } => path,
+            BuildJobData::Initial(path) => path,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct JobResult {
+    pub job_id: u64,
+    pub node_id: NodeId,
+    pub result: JobResultData,
+}
+
+impl ResultTrait for JobResult {}
+
+#[derive(Debug)]
+pub enum JobResultData {
+    DirectoryListing {
+        path: PathBuf,
+        children: Vec<DirectoryEntry>,
+    },
+    FileHash {
+        path: PathBuf,
+        hash: GeneralHash,
+        size: u64,
+    },
+    ArchiveHash {
+        path: PathBuf,
+        size: u64,
+        file_hash: GeneralHash,
+        children: Vec<ArchiveFile>,
+        content_directory_hash: GeneralHash,
+    },
+    DirectoryHash {
+        path: PathBuf,
+        hash: GeneralHash,
+    },
+    SymlinkHash {
+        path: PathBuf,
+        hash: GeneralHash,
+    },
+    Error {
+        path: PathBuf,
+        reason: String,
+    },
+    Other {
+        path: PathBuf,
+        hash: GeneralHash,
+    },
+    InitialEvaluation(DirectoryEntry),
+}
+
+impl JobResultData {
+    pub fn path(&self) -> &PathBuf {
+        match self {
+            JobResultData::DirectoryListing { path, .. } => path,
+            JobResultData::FileHash { path, .. } => path,
+            JobResultData::ArchiveHash { path, .. } => path,
+            JobResultData::DirectoryHash { path, .. } => path,
+            JobResultData::SymlinkHash { path, .. } => path,
+            JobResultData::Error { path, .. } => path,
+            JobResultData::Other { path, .. } => path,
+            JobResultData::InitialEvaluation(entry) => &entry.path,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FileType {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
+#[derive(Debug)]
+pub struct DirectoryEntry {
+    pub path: PathBuf,
+    pub modified: u64,
+    pub file_type: FileType,
+    pub file_size: u64,
 }

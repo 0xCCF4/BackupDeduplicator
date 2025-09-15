@@ -1,5 +1,5 @@
 use log::{debug, error, trace, warn};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -10,7 +10,7 @@ pub trait JobTrait<T: Send = Self> {
     ///
     /// # Returns
     /// * `usize` - The job id.
-    fn job_id(&self) -> usize;
+    fn job_id(&self) -> u64;
 }
 
 /// A trait that must be implemented by a result type to be returned by the pool.
@@ -24,13 +24,11 @@ pub trait ResultTrait<T: Send = Self> {}
 /// * `usize` - The current worker id.
 /// * `Job` - The job received that should be processed.
 /// * `&Sender<Result>` - A sender to publish job results.
-/// * `&Sender<Job>` - A sender to publish new jobs to the thread pool.
 /// * `&mut Argument` - A mutable reference to the arguments passed to the worker thread via the thread pool creation.
 ///
 /// # Returns
 /// * `()` - The worker entry function should not return a value but instead should send the result via the `Sender<Result>` back to the main thread.
-type WorkerEntry<Job, Result, Argument> =
-    fn(usize, Job, &Sender<Result>, &Sender<Job>, &mut Argument);
+type WorkerEntry<Job, Result, Argument> = fn(usize, Job, &Sender<Result>, &mut Argument);
 
 /// Internal worker struct to manage the worker thread via the thread pool.
 ///
@@ -49,7 +47,6 @@ impl Worker {
     /// * `id` - The worker id.
     /// * `job_receive` - A receiver to receive jobs from the thread pool.
     /// * `result_publish` - A sender to publish job results.
-    /// * `job_publish` - A sender to publish new jobs to the thread pool.
     /// * `func` - The worker entry function to process jobs.
     /// * `arg` - The arguments passed to the worker thread via the thread pool creation.
     ///
@@ -63,12 +60,11 @@ impl Worker {
         id: usize,
         job_receive: Arc<Mutex<Receiver<Job>>>,
         result_publish: Sender<Result>,
-        job_publish: Sender<Job>,
         func: WorkerEntry<Job, Result, Argument>,
         arg: Argument,
     ) -> Worker {
         let thread = thread::spawn(move || {
-            Worker::worker_entry(id, job_receive, result_publish, job_publish, func, arg);
+            Worker::worker_entry(id, job_receive, result_publish, func, arg);
         });
 
         Worker {
@@ -83,7 +79,6 @@ impl Worker {
     /// * `id` - The worker id.
     /// * `job_receive` - A receiver to receive jobs from the thread pool.
     /// * `result_publish` - A sender to publish job results.
-    /// * `job_publish` - A sender to publish new jobs to the thread pool.
     /// * `func` - The worker entry function to process jobs.
     /// * `arg` - The arguments passed to the worker thread via the thread pool creation.
     fn worker_entry<
@@ -94,7 +89,6 @@ impl Worker {
         id: usize,
         job_receive: Arc<Mutex<Receiver<Job>>>,
         result_publish: Sender<Result>,
-        job_publish: Sender<Job>,
         func: WorkerEntry<Job, Result, Argument>,
         mut arg: Argument,
     ) {
@@ -120,7 +114,7 @@ impl Worker {
                 Ok(job) => {
                     trace!("Worker {} received job {}", id, job.job_id());
                     // Call the user function to process the job
-                    func(id, job, &result_publish, &job_publish, &mut arg);
+                    func(id, job, &result_publish, &mut arg);
                 }
             }
         }
@@ -140,8 +134,7 @@ where
     Result: Send,
 {
     workers: Vec<Worker>,
-    thread: Option<thread::JoinHandle<()>>,
-    job_publish: Arc<Mutex<Option<Sender<Job>>>>,
+    job_publish: Option<Sender<Job>>,
     result_receive: Receiver<Result>,
 }
 
@@ -168,11 +161,10 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
 
         let mut workers = Vec::with_capacity(args.len());
 
+        let (result_publish, result_receive) = mpsc::channel();
         let (job_publish, job_receive) = mpsc::channel();
 
         let job_receive = Arc::new(Mutex::new(job_receive));
-        let (result_publish, result_receive) = mpsc::channel();
-        let (thread_publish_job, thread_receive_job) = mpsc::channel();
 
         let mut id = 0;
         while let Some(arg) = args.pop() {
@@ -180,25 +172,16 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
                 id,
                 Arc::clone(&job_receive),
                 result_publish.clone(),
-                thread_publish_job.clone(),
                 func,
                 arg,
             ));
             id += 1;
         }
 
-        let job_publish = Arc::new(Mutex::new(Some(job_publish)));
-        let job_publish_clone = Arc::clone(&job_publish);
-
-        let thread = thread::spawn(move || {
-            ThreadPool::<Job, Result>::pool_entry(job_publish_clone, thread_receive_job);
-        });
-
         ThreadPool {
             workers,
-            job_publish,
+            job_publish: Some(job_publish),
             result_receive,
-            thread: Some(thread),
         }
     }
 
@@ -207,51 +190,14 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
     /// # Arguments
     /// * `job` - The job that should be processed by a worker thread.
     pub fn publish(&self, job: Job) {
-        let job_publish = self.job_publish.lock();
-        match job_publish {
-            Err(e) => {
-                error!("ThreadPool is shutting down. Cannot publish job. {}", e);
+        match self.job_publish.as_ref() {
+            None => {
+                error!("ThreadPool is shutting down. Cannot publish job.");
             }
-            Ok(job_publish) => match job_publish.as_ref() {
-                None => {
-                    error!("ThreadPool is shutting down. Cannot publish job.");
+            Some(job_publish) => {
+                if let Err(e) = job_publish.send(job) {
+                    error!("Failed to publish job on thread pool. {}", e);
                 }
-                Some(job_publish) => {
-                    if let Err(e) = job_publish.send(job) {
-                        error!("Failed to publish job on thread pool. {}", e);
-                    }
-                }
-            },
-        }
-    }
-
-    /// Internal function that is run in a separate thread. It feeds back jobs from the worker threads to the input of the thread pool.
-    ///
-    /// # Arguments
-    /// * `job_publish` - A sender to publish new jobs to the thread pool.
-    /// * `job_receive` - A receiver to receive jobs from the worker threads.
-    fn pool_entry(job_publish: Arc<Mutex<Option<Sender<Job>>>>, job_receive: Receiver<Job>) {
-        loop {
-            let job = job_receive.recv();
-
-            match job {
-                Err(_) => {
-                    trace!("Pool worker shutting down");
-                    break;
-                }
-                Ok(job) => match job_publish.lock() {
-                    Err(e) => {
-                        error!("Pool worker shutting down: {}", e);
-                        break;
-                    }
-                    Ok(job_publish) => {
-                        if let Some(job_publish) = job_publish.as_ref() {
-                            job_publish
-                                .send(job)
-                                .expect("Pool worker failed to send job. This should never fail.");
-                        }
-                    }
-                },
             }
         }
     }
@@ -284,16 +230,15 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
     ) -> std::result::Result<Result, RecvTimeoutError> {
         self.result_receive.recv_timeout(timeout)
     }
+
+    pub fn try_recv(&self) -> std::result::Result<Result, TryRecvError> {
+        self.result_receive.try_recv()
+    }
 }
 
 impl<Job: Send, Result: Send> Drop for ThreadPool<Job, Result> {
     fn drop(&mut self) {
-        drop(
-            self.job_publish
-                .lock()
-                .expect("This should not break")
-                .take(),
-        );
+        drop(self.job_publish.take());
 
         for worker in &mut self.workers {
             debug!("Shutting down worker {}", worker.id);
@@ -306,17 +251,6 @@ impl<Job: Send, Result: Send> Drop for ThreadPool<Job, Result> {
                     Err(_) => {
                         warn!("Worker {} panicked", worker.id);
                     }
-                }
-            }
-        }
-
-        if let Some(thread) = self.thread.take() {
-            match thread.join() {
-                Ok(_) => {
-                    trace!("ThreadPool shut down");
-                }
-                Err(_) => {
-                    warn!("ThreadPool worker panicked");
                 }
             }
         }

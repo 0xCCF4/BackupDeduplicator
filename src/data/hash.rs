@@ -1,5 +1,4 @@
 use crate::path::FilePath;
-use crate::stages::build::intermediary_build_data::BuildFile;
 #[cfg(any(feature = "hash-sha2", feature = "hash-sha1", feature = "hash-xxh"))]
 use crate::utils;
 use const_format::concatcp;
@@ -590,58 +589,63 @@ impl GeneralHash {
     ///
     /// # Returns
     /// The count of files that were hashed.
-    ///
-    /// # Errors
-    /// Does not return an error. Might return an error in the future.
-    pub fn hash_directory<'a>(
+    pub fn hash_directory_build_files<'a>(
         &mut self,
-        children: impl Iterator<Item = &'a BuildFile>,
-    ) -> anyhow::Result<u64> {
+        children: impl Iterator<Item = &'a GeneralHash>,
+    ) -> u64 {
         let mut hasher = self.hasher();
 
         let mut content_size = 0;
 
         for child in children {
             content_size += 1;
-            hasher.update(child.get_content_hash().as_bytes());
+            hasher.update(child.as_bytes());
         }
 
         *self = hasher.finalize();
 
-        Ok(content_size)
+        content_size
+    }
+
+    /// Computes the hash value of file iterator/directory.
+    ///
+    /// # Arguments
+    /// * `children` - The iterator of files to hash.
+    ///
+    /// # Returns
+    /// The count of files that were hashed.
+    pub fn hash_directory<'a>(&mut self, children: impl Iterator<Item = &'a GeneralHash>) -> u64 {
+        let mut hasher = self.hasher();
+
+        let mut content_size = 0;
+
+        for child in children {
+            content_size += 1;
+            hasher.update(child.as_bytes());
+        }
+
+        *self = hasher.finalize();
+
+        content_size
     }
 
     /// Computes the hash value of the specified path.
     ///
     /// # Arguments
     /// * `path` - The path to hash.
-    ///
-    /// # Returns
-    /// Does not return a value.
-    ///
-    /// # Errors
-    /// Does not return an error. Might return an error in the future.
-    pub fn hash_path(&mut self, path: &Path) -> anyhow::Result<()> {
+    pub fn hash_path(&mut self, path: &Path) {
         let mut hasher = self.hasher();
 
         hasher.update(path.as_os_str().as_encoded_bytes());
 
         *self = hasher.finalize();
-
-        Ok(())
     }
 
     /// Computes the hash value of the specified file path.
     ///
     /// # Arguments
     /// * `path` - The file path to hash.
-    ///
-    /// # Returns
-    /// Does not return a value.
-    ///
-    /// # Errors
-    /// Does not return an error. Might return an error in the future.
-    pub fn hash_filepath(&mut self, path: &FilePath) -> anyhow::Result<()> {
+    pub fn hash_filepath(&mut self, path: &FilePath) {
         let mut hasher = self.hasher();
 
         for component in &path.path {
@@ -649,8 +653,6 @@ impl GeneralHash {
         }
 
         *self = hasher.finalize();
-
-        Ok(())
     }
 }
 

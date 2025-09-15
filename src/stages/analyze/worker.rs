@@ -38,7 +38,7 @@ pub struct AnalysisWorkerArgument {
 /// * `file` - The file to analyze.
 #[derive(Debug)]
 pub struct AnalysisJob {
-    id: usize,
+    id: u64,
     pub file: Arc<HashTreeFileEntry>,
 }
 
@@ -63,14 +63,14 @@ impl JobTrait for AnalysisJob {
     ///
     /// # Returns
     /// The job id.
-    fn job_id(&self) -> usize {
+    fn job_id(&self) -> u64 {
         self.id
     }
 }
 
-static JOB_COUNTER: Mutex<usize> = Mutex::new(0);
+static JOB_COUNTER: Mutex<u64> = Mutex::new(0);
 
-fn new_job_counter_id() -> usize {
+fn new_job_counter_id() -> u64 {
     let mut counter = JOB_COUNTER.lock().expect("Failed to lock job counter");
     *counter += 1;
     *counter
@@ -267,7 +267,6 @@ pub fn worker_run(
     id: usize,
     job: AnalysisJob,
     _result_publish: &Sender<AnalysisResult>,
-    _job_publish: &Sender<AnalysisJob>,
     arg: &mut AnalysisWorkerArgument,
 ) {
     recursive_process_file(id, &job.file.path, arg);
