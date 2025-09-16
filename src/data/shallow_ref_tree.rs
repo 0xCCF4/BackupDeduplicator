@@ -13,6 +13,7 @@ fn new_node_id() -> NodeId {
     *counter
 }
 
+#[derive(Debug)]
 pub struct TreeNode<Node> {
     id: NodeId,
     pub content: Node,
@@ -24,6 +25,9 @@ impl<Node> TreeNode<Node> {
             id: new_node_id(),
             content,
         }
+    }
+    pub fn id(&self) -> NodeId {
+        self.id
     }
 }
 
@@ -78,11 +82,13 @@ impl<Node> ShallowRefTree<Node> {
         let mut nodes = BTreeMap::new();
         let root_id = root.id;
         nodes.insert(root_id, root);
+        let mut child_ref = BTreeMap::new();
+        child_ref.insert(root_id, BTreeSet::new());
         Self {
             nodes,
             root_id,
-            parent_ref: BTreeMap::new().into(),
-            child_ref: BTreeMap::new().into(),
+            parent_ref: BTreeMap::new(),
+            child_ref,
         }
     }
 
@@ -105,7 +111,7 @@ impl<Node> ShallowRefTree<Node> {
 
         self.nodes.insert(node.id, node);
         self.parent_ref.insert(id, parent);
-        self.child_ref.insert(id, BTreeSet::new().into());
+        self.child_ref.insert(id, BTreeSet::new());
 
         if let Some(parent_child_ref) = self.child_ref.get_mut(&parent) {
             parent_child_ref.insert(id);

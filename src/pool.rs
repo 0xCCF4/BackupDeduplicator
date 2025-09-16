@@ -201,6 +201,20 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
             }
         }
     }
+    
+    pub fn publish_if_alive(&self, job: Job) -> bool{
+        match self.job_publish.as_ref() {
+            None => false,
+            Some(job_publish) => {
+                if let Err(e) = job_publish.send(job) {
+                    error!("Failed to publish job on thread pool. {}", e);
+                    false
+                } else {
+                    true
+                }
+            }
+        }
+    }
 
     /// Receive a result from the worker threads. This function will block until a result is available.
     ///
@@ -233,6 +247,10 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
 
     pub fn try_recv(&self) -> std::result::Result<Result, TryRecvError> {
         self.result_receive.try_recv()
+    }
+
+    pub fn close(&mut self) {
+        drop(self.job_publish.take());
     }
 }
 

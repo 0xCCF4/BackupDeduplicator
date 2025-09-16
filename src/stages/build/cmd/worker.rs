@@ -78,12 +78,13 @@ pub fn worker_run(
     arg: &mut WorkerArgument,
 ) {
     let result_builder = job.result();
+    println!("{:?}", job.data);
     match job.data {
         BuildJobData::DiscoverDirectory(directory_path) => {
             let dir = match fs::read_dir(&directory_path) {
                 Ok(dir) => dir,
                 Err(e) => {
-                    error!("[{id}] Error reading directory: {e}. Skipping.");
+                    error!("[{id}] Error reading directory: {e}.");
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
                             path: directory_path,
@@ -100,7 +101,7 @@ pub fn worker_run(
                 let entry = match entry {
                     Ok(entry) => entry,
                     Err(e) => {
-                        error!("[{id}] Error reading directory entry: {e}. Skipping.");
+                        error!("[{id}] Error reading directory entry: {e}.");
                         result_publish
                             .send(result_builder.build(JobResultData::Error {
                                 path: directory_path,
@@ -114,7 +115,7 @@ pub fn worker_run(
                 let metadata = match entry.metadata() {
                     Ok(metadata) => metadata,
                     Err(e) => {
-                        error!("[{id}] Error reading metadata: {e}. Skipping.");
+                        error!("[{id}] Error reading metadata: {e}.");
                         children.push(DirectoryEntry {
                             path: entry.path(),
                             modified: 0,

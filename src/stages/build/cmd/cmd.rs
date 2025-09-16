@@ -139,6 +139,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct BuildJob {
     pub job_id: u64,
     pub node_id: NodeId,
