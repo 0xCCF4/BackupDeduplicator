@@ -78,16 +78,17 @@ pub fn worker_run(
     arg: &mut WorkerArgument,
 ) {
     let result_builder = job.result();
-    println!("{:?}", job.data);
+
     match job.data {
         BuildJobData::DiscoverDirectory(directory_path) => {
             let dir = match fs::read_dir(&directory_path) {
                 Ok(dir) => dir,
                 Err(e) => {
-                    error!("[{id}] Error reading directory: {e}.");
+                    error!("[{id}] Error reading directory {directory_path:?}: {e}.");
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
-                            path: directory_path,
+                            path: directory_path.clone(),
+                            occurred_at: directory_path,
                             reason: e.to_string(),
                         }))
                         .expect("Failed to send result");
@@ -101,9 +102,10 @@ pub fn worker_run(
                 let entry = match entry {
                     Ok(entry) => entry,
                     Err(e) => {
-                        error!("[{id}] Error reading directory entry: {e}.");
+                        error!("[{id}] Error reading directory entry of {directory_path:?}: {e}.");
                         result_publish
                             .send(result_builder.build(JobResultData::Error {
+                                occurred_at: directory_path.clone(),
                                 path: directory_path,
                                 reason: e.to_string(),
                             }))
@@ -115,7 +117,7 @@ pub fn worker_run(
                 let metadata = match entry.metadata() {
                     Ok(metadata) => metadata,
                     Err(e) => {
-                        error!("[{id}] Error reading metadata: {e}.");
+                        error!("[{id}] Error reading metadata {:?}: {e}.", entry.path());
                         children.push(DirectoryEntry {
                             path: entry.path(),
                             modified: 0,
@@ -128,6 +130,8 @@ pub fn worker_run(
 
                 children.push(evaluate_file(id, entry.path(), &metadata));
             }
+
+            children.sort_by(|a, b| a.path.cmp(&b.path));
 
             result_publish
                 .send(result_builder.build(JobResultData::DirectoryListing {
@@ -142,6 +146,7 @@ pub fn worker_run(
                     error!("Error while opening file {:?}: {}", path, err);
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
+                            occurred_at: path.clone(),
                             path,
                             reason: err.to_string(),
                         }))
@@ -194,6 +199,7 @@ pub fn worker_run(
                     error!("[{}] Error while probing file for archive: {}", id, err);
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
+                            occurred_at: path.clone(),
                             path,
                             reason: err.to_string(),
                         }))
@@ -207,6 +213,7 @@ pub fn worker_run(
                 error!("[{id}] Error while reading file: {err}. Skipping.");
                 result_publish
                     .send(result_builder.build(JobResultData::Error {
+                        occurred_at: path.clone(),
                         path,
                         reason: err.to_string(),
                     }))
@@ -279,6 +286,7 @@ pub fn worker_run(
                     error!("[{id}] Error reading metadata: {e}. Skipping.");
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
+                            occurred_at: path.clone(),
                             path,
                             reason: e.to_string(),
                         }))
@@ -297,6 +305,7 @@ pub fn worker_run(
             error!("[{id}] Received unexpected DirectoryStub job. This should not have happened.");
             result_publish
                 .send(result_builder.build(JobResultData::Error {
+                    occurred_at: path.clone(),
                     path,
                     reason: "Unexpected DirectoryStub job".to_string(),
                 }))

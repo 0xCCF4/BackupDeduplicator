@@ -201,8 +201,8 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
             }
         }
     }
-    
-    pub fn publish_if_alive(&self, job: Job) -> bool{
+
+    pub fn publish_if_alive(&self, job: Job) -> bool {
         match self.job_publish.as_ref() {
             None => false,
             Some(job_publish) => {

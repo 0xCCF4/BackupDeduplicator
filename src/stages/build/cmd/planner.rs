@@ -1,16 +1,15 @@
 use crate::hash::GeneralHash;
 use crate::pool::ThreadPool;
 use crate::shallow_ref_tree;
-use crate::shallow_ref_tree::{NodeId, ShallowRefTree};
+use crate::shallow_ref_tree::{DebugGraph, NodeId, ShallowRefTree};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
 use crate::stages::build::cmd::{
     BuildJob, BuildJobData, BuildSettings, FileType, JobResult, JobResultData,
 };
 use log::{error, info, trace, warn};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
 use std::path::PathBuf;
-use std::sync::mpsc::RecvTimeoutError;
-use std::time::Duration;
 
 #[derive(Debug)]
 enum JobTreeData {
@@ -23,6 +22,28 @@ enum JobTreeData {
     Finished(JobResultData),
 }
 
+impl DebugGraph for JobTreeData {
+    type Color = &'static str;
+    type Label = String;
+    fn debug_color(&self) -> Option<Self::Color> {
+        match self {
+            JobTreeData::Root => None,
+            JobTreeData::NotScheduled(_) => Some("gray"),
+            JobTreeData::BlockedByChildren(_) => Some("yellow"),
+            JobTreeData::Running(_) => Some("cyan"),
+            JobTreeData::Finished(JobResultData::Error { .. }) => Some("red"),
+            JobTreeData::Finished(_) => Some("green"),
+        }
+    }
+    fn label(&self) -> Option<Self::Label> {
+        if let JobTreeData::Root = self {
+            return Some("Root".into());
+        }
+
+        self.path().map(|x| x.to_string_lossy().into())
+    }
+}
+
 impl JobTreeData {
     pub fn mark_running(&mut self) {
         if let JobTreeData::BlockedByChildren(job) | JobTreeData::NotScheduled(job) = self {
@@ -30,7 +51,9 @@ impl JobTreeData {
         }
     }
     pub fn path(&self) -> Option<&PathBuf> {
-        self.job().map(|x|x.path()).or(self.result().map(|x|x.path()))
+        self.job()
+            .map(|x| x.path())
+            .or(self.result().map(|x| x.path()))
     }
     pub fn job(&self) -> Option<&BuildJobData> {
         match self {
@@ -68,12 +91,14 @@ pub struct JobPlanner {
     running_jobs: BTreeMap<u64, shallow_ref_tree::NodeId>,
 
     pool: ThreadPool<BuildJob, JobResult>,
+
+    _debug_dotfiles: u32,
 }
 
 pub enum ScheduleJobsResult {
     Finished,
     Error {
-        path: PathBuf,
+        occurred_at: PathBuf,
         reason: String,
     },
     Ok,
@@ -98,6 +123,7 @@ impl JobPlanner {
             scheduled_jobs: BTreeSet::new(),
 
             pool: ThreadPool::new(args, worker_run),
+            _debug_dotfiles: 0,
         }
     }
 
@@ -124,6 +150,9 @@ impl JobPlanner {
         };
 
         trace!("[RECEIVE] Processing job results: {result:?}");
+        if let Err(err) = self.save_dotfile() {
+            error!("{err:?}");
+        }
 
         match result.result {
             x @ JobResultData::ArchiveHash { .. }
@@ -166,11 +195,11 @@ impl JobPlanner {
                             blocking = true;
                         }
                         FileType::Other => {
-                            let node = self.tree.node_mut(result.node_id).expect("node must exist");
-                            node.content = JobTreeData::Finished(JobResultData::Other {
+                            let child = JobTreeData::Finished(JobResultData::Other {
                                 path: entry.path,
                                 hash: GeneralHash::NULL,
                             });
+                            self.tree.add_child(result.node_id, child);
                         }
                     }
                 }
@@ -219,6 +248,9 @@ impl JobPlanner {
         let jobs = std::mem::take(&mut self.scheduled_jobs);
 
         for node_id in jobs {
+            if let Err(err) = self.save_dotfile() {
+                error!("{err:?}");
+            }
             let node = self.tree.node(node_id);
             if let Some(node) = node {
                 trace!("[SCHEDULE] {:?}", node);
@@ -228,82 +260,97 @@ impl JobPlanner {
                             warn!("Encountered BLOCKED-BY-CHILDREN while no children were found")
                         }
                         Some(children) => {
-                            if children.iter().any(|child| matches!(child.content, JobTreeData::Finished(JobResultData::Error {..}))) || children
+                            if children.iter().any(|child| {
+                                matches!(
+                                    child.content,
+                                    JobTreeData::Finished(JobResultData::Error { .. })
+                                )
+                            }) || children
                                 .iter()
                                 .all(|child| matches!(child.content, JobTreeData::Finished { .. }))
                             {
                                 trace!("- all children evaluated or error");
-                                let children_nodes =
-                                    children.iter().map(|x| x.content.result());
+                                let children_nodes = children.iter().map(|x| x.content.result());
 
                                 let mut hashes = Vec::new();
                                 let mut error_found = None;
                                 for child in children_nodes.flatten() {
-
-                                        match child {
-                                            JobResultData::ArchiveHash { file_hash, .. }
-                                            | JobResultData::SymlinkHash {
-                                                hash: file_hash, ..
-                                            }
-                                            | JobResultData::DirectoryHash {
-                                                hash: file_hash, ..
-                                            }
-                                            | JobResultData::FileHash {
-                                                hash: file_hash, ..
-                                            }
-                                            | JobResultData::Other {
-                                                hash: file_hash, ..
-                                            } => {
-                                                hashes.push(file_hash);
-                                            }
-                                            JobResultData::Error { path, reason } => {
-                                                error_found = Some((path.clone(), reason.clone()));
-                                                break;
-                                            }
-                                            JobResultData::DirectoryListing { path, children: _ } => {
-                                                error_found = Some((path.clone(), "Parent was evaluated and child did not hash properly".to_string()));
-                                                break;
-                                            }
-                                            JobResultData::InitialEvaluation(entry) => {
-                                                error_found = Some((entry.path.clone(), "Parent was evaluated and child was of initial eval type".to_string()));
-                                                break;
-                                            }
+                                    match child {
+                                        JobResultData::ArchiveHash { file_hash, .. }
+                                        | JobResultData::SymlinkHash {
+                                            hash: file_hash, ..
                                         }
+                                        | JobResultData::DirectoryHash {
+                                            hash: file_hash, ..
+                                        }
+                                        | JobResultData::FileHash {
+                                            hash: file_hash, ..
+                                        }
+                                        | JobResultData::Other {
+                                            hash: file_hash, ..
+                                        } => {
+                                            hashes.push(file_hash);
+                                        }
+                                        JobResultData::Error {
+                                            occurred_at,
+                                            reason,
+                                            ..
+                                        } => {
+                                            error_found =
+                                                Some((occurred_at.clone(), reason.clone()));
+                                            break;
+                                        }
+                                        JobResultData::DirectoryListing { path, children: _ } => {
+                                            error_found = Some((path.clone(), "Parent was evaluated and child did not hash properly".to_string()));
+                                            break;
+                                        }
+                                        JobResultData::InitialEvaluation(entry) => {
+                                            error_found = Some((entry.path.clone(), "Parent was evaluated and child was of initial eval type".to_string()));
+                                            break;
+                                        }
+                                    }
                                 }
 
-                                if let Some((path, reason)) = error_found {
+                                if let Some((occurred_at, reason)) = error_found {
                                     trace!("- bubble up error");
                                     let mut current = Some(node_id);
-                                    while let Some(node) = current {
-                                        trace!("- setting: {node} to error");
-                                        let parent = self.tree.node_mut(node_id).unwrap();
-                                        if !matches!(parent.content, JobTreeData::Root) {
-                                            parent.content = JobTreeData::Finished(JobResultData::Error {
-                                                path: path.clone(),
-                                                reason: reason.clone(),
-                                            });
+                                    while let Some(node_id) = current {
+                                        trace!("- setting: {node_id} to error");
+                                        let node = self.tree.node_mut(node_id).unwrap();
+                                        if !matches!(node.content, JobTreeData::Root) {
+                                            node.content =
+                                                JobTreeData::Finished(JobResultData::Error {
+                                                    path: node
+                                                        .content
+                                                        .path()
+                                                        .expect("already checked for !root")
+                                                        .clone(),
+                                                    occurred_at: occurred_at.clone(),
+                                                    reason: reason.clone(),
+                                                });
                                         };
-                                        current = self.tree.parent(node);
+                                        current = self.tree.parent(node_id);
                                     }
                                     self.scheduled_jobs.insert(self.tree.root_id);
                                     continue;
                                 }
 
-                                let parent = self.tree.parent_ref(node_id).expect("parent must exist");
-                                if let Some(parent_path) = parent.content.path() { // not some for Root
-                                    trace!("- prepare parent dire hash");
+                                if let Some(path) = node.content.path() {
+                                    // not some for Root
+                                    trace!("- prepare parent dir hash");
                                     let directory_job = BuildJobData::HashDirectory {
-                                        path: parent_path.clone(),
+                                        path: path.clone(),
                                         children: hashes.into_iter().cloned().collect(),
                                     };
-                                    let parent = self.tree.parent_mut(node_id).expect("parent must exist");
-                                    parent.content = JobTreeData::Running(directory_job.clone());
+                                    let node =
+                                        self.tree.node_mut(node_id).expect("parent must exist");
+                                    node.content = JobTreeData::Running(directory_job.clone());
 
                                     trace!("- publish job");
-                                    let job = BuildJob::new(directory_job, parent.id());
+                                    let job = BuildJob::new(directory_job, node.id());
                                     let job_id = job.job_id;
                                     if self.pool.publish_if_alive(job) {
-                                        self.running_jobs.insert(job_id, parent.id());
+                                        self.running_jobs.insert(job_id, node.id());
                                     }
                                 }
                             }
@@ -333,9 +380,16 @@ impl JobPlanner {
                         let mut finished = true;
                         for child in immediate_children {
                             match &child.content {
-                                JobTreeData::Finished(JobResultData::Error { path, reason }) => {
+                                JobTreeData::Finished(JobResultData::Error {
+                                    occurred_at,
+                                    reason,
+                                    ..
+                                }) => {
                                     trace!("- error");
-                                    return ScheduleJobsResult::Error {path: path.clone(), reason: reason.clone()};
+                                    return ScheduleJobsResult::Error {
+                                        occurred_at: occurred_at.clone(),
+                                        reason: reason.clone(),
+                                    };
                                 }
                                 JobTreeData::Finished(_) => {}
                                 _ => {
@@ -345,7 +399,7 @@ impl JobPlanner {
                             }
                         }
                         if finished {
-                            return ScheduleJobsResult::Finished
+                            return ScheduleJobsResult::Finished;
                         }
                     }
                 }
@@ -358,11 +412,18 @@ impl JobPlanner {
         loop {
             let mut stopping_with = None;
             match self.schedule_jobs() {
-                ScheduleJobsResult::Ok => {},
-                ScheduleJobsResult::Error { path, reason } => {
-                    error!("Stopped job dispatcher because of error with path {:?}: {}", path, reason);
-                    stopping_with = Some(Err((path, reason)));
-                },
+                ScheduleJobsResult::Ok => {}
+                ScheduleJobsResult::Error {
+                    occurred_at,
+                    reason,
+                    ..
+                } => {
+                    error!(
+                        "Stopped job dispatcher because of error with path {:?}: {}",
+                        occurred_at, reason
+                    );
+                    stopping_with = Some(Err((occurred_at, reason)));
+                }
                 ScheduleJobsResult::Finished => {
                     trace!("Gracefully stopping");
                     stopping_with = Some(Ok(()));
@@ -390,5 +451,13 @@ impl JobPlanner {
                 }
             }
         }
+    }
+
+    pub fn save_dotfile(&mut self) -> Result<(), std::io::Error> {
+        self._debug_dotfiles += 1;
+        let id = self._debug_dotfiles;
+
+        let mut file = File::create(format!("/tmp/tree/{id:04}.dot"))?;
+        self.tree.to_dotfile(&mut file)
     }
 }

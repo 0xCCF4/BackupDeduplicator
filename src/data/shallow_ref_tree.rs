@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Display};
+use std::io::Write;
 use std::ops::Deref;
 use std::sync::Mutex;
 
@@ -171,6 +173,53 @@ impl<Node> ShallowRefTree<Node> {
     pub fn node_mut<I: Into<NodeId>>(&mut self, node: I) -> Option<&mut TreeNode<Node>> {
         self.nodes.get_mut(&node.into())
     }
+}
+
+impl<Color: Display, Label: Display, Node: DebugGraph<Color = Color, Label = Label>>
+    ShallowRefTree<Node>
+{
+    pub fn to_dotfile<W: Write>(&self, stream: &mut W) -> Result<(), std::io::Error> {
+        writeln!(stream, "digraph tree {{")?;
+
+        for (node_id, node) in self.nodes.iter() {
+            let label = node
+                .content
+                .label()
+                .map(|x| x.to_string())
+                .unwrap_or_default()
+                .replace("\"", "'")
+                .replace("\\", "");
+            let limited_label = &label[..500.min(label.len())];
+            let color = match node.content.debug_color() {
+                None => "".to_string(),
+                Some(color) => format!(
+                    " style=filled color={}",
+                    color.to_string().replace("\"", "'").replace("\\", "")
+                ),
+            };
+            writeln!(
+                stream,
+                "\t\"N{node_id}\"[label=\"{node_id}:{limited_label}\"{color}];"
+            )?;
+        }
+
+        for (node_id, children) in self.child_ref.iter() {
+            for child_id in children.iter() {
+                writeln!(stream, "\t\"N{node_id}\" -> \"N{child_id}\";")?;
+            }
+        }
+
+        writeln!(stream, "}}")?;
+
+        Ok(())
+    }
+}
+
+pub trait DebugGraph {
+    type Color;
+    type Label;
+    fn debug_color(&self) -> Option<Self::Color>;
+    fn label(&self) -> Option<Self::Label>;
 }
 
 pub struct TreeMutList<'node, 'tree: 'node, Node> {

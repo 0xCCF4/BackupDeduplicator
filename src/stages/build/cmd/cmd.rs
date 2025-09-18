@@ -253,6 +253,7 @@ pub enum JobResultData {
     },
     Error {
         path: PathBuf,
+        occurred_at: PathBuf,
         reason: String,
     },
     Other {
