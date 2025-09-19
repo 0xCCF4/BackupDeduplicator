@@ -3,10 +3,12 @@ use crate::copy_stream::BufferCopyStreamReader;
 use crate::hash::{GeneralHash, GeneralHashType, HashingStream};
 use crate::path::FilePath;
 use crate::stages::build::cmd::worker::{is_archive, WorkerArgument};
+use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
 use log::{error, trace, warn};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::PathBuf;
@@ -481,5 +483,110 @@ impl ArchiveFile {
             ArchiveFile::Symlink { modified, .. } => *modified,
             ArchiveFile::Other { modified, .. } => *modified,
         }
+    }
+
+    pub fn to_hash_file_entry(&self) -> Vec<HashTreeFileEntry> {
+        let mut queue = VecDeque::new();
+        queue.push_back(self);
+        let mut result = Vec::new();
+
+        while let Some(file) = queue.pop_front() {
+            match file {
+                ArchiveFile::File {
+                    path,
+                    modified,
+                    content_hash,
+                    content_size,
+                } => result.push(HashTreeFileEntry {
+                    archive_children: vec![],
+                    modified: *modified,
+                    path: path.clone(),
+                    hash: content_hash.clone(),
+                    file_type: HashTreeFileEntryType::File,
+                    children: vec![],
+                    archive_inner_hash: None,
+                    size: *content_size,
+                }),
+                ArchiveFile::Other {
+                    path,
+                    content_size,
+                    modified,
+                } => result.push(HashTreeFileEntry {
+                    archive_children: vec![],
+                    modified: *modified,
+                    path: path.clone(),
+                    hash: GeneralHash::NULL,
+                    file_type: HashTreeFileEntryType::Other,
+                    children: vec![],
+                    archive_inner_hash: None,
+                    size: *content_size,
+                }),
+                ArchiveFile::Symlink {
+                    path,
+                    modified,
+                    content_hash,
+                    target: _,
+                    content_size,
+                } => result.push(HashTreeFileEntry {
+                    archive_children: vec![],
+                    modified: *modified,
+                    path: path.clone(),
+                    hash: content_hash.clone(),
+                    file_type: HashTreeFileEntryType::Symlink,
+                    children: vec![],
+                    archive_inner_hash: None,
+                    size: *content_size,
+                }),
+                ArchiveFile::Directory {
+                    path,
+                    modified,
+                    content_hash,
+                    children,
+                    number_of_children: _,
+                } => {
+                    let mut child_entries = Vec::with_capacity(children.len());
+                    for child in children {
+                        queue.push_back(child);
+                        child_entries.push(child.get_inner_hash().clone());
+                    }
+                    result.push(HashTreeFileEntry {
+                        archive_children: vec![],
+                        modified: *modified,
+                        path: path.clone(),
+                        hash: content_hash.clone(),
+                        file_type: HashTreeFileEntryType::Directory,
+                        children: child_entries,
+                        archive_inner_hash: None,
+                        size: children.len() as u64,
+                    });
+                }
+                ArchiveFile::ArchiveFile {
+                    path,
+                    modified,
+                    file_hash,
+                    directory_hash,
+                    children,
+                    content_size,
+                } => {
+                    let mut child_entries = Vec::with_capacity(children.len());
+                    for child in children {
+                        queue.push_back(child);
+                        child_entries.push(child.get_inner_hash().clone());
+                    }
+                    result.push(HashTreeFileEntry {
+                        archive_children: child_entries,
+                        modified: *modified,
+                        path: path.clone(),
+                        hash: file_hash.clone(),
+                        file_type: HashTreeFileEntryType::File,
+                        children: vec![],
+                        archive_inner_hash: Some(directory_hash.clone()),
+                        size: *content_size,
+                    });
+                }
+            }
+        }
+
+        result
     }
 }

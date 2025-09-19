@@ -78,7 +78,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
 
     let mut save_file = HashTreeFile::new(
         &mut null_out_writer,
-        &mut input_buf_reader,
+        Some(&mut input_buf_reader),
         GeneralHashType::NULL,
         true,
         true,

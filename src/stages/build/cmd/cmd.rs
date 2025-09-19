@@ -4,11 +4,13 @@ use crate::pool::{JobTrait, ResultTrait};
 use crate::shallow_ref_tree::NodeId;
 use crate::stages::build::cmd::archive::ArchiveFile;
 use crate::stages::build::cmd::planner::JobPlanner;
-use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry};
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::Write;
+use std::io::{Seek, SeekFrom};
 use std::path::PathBuf;
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::{fs, panic, process};
 
@@ -71,17 +73,19 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         }
     };
 
+    let mut reader = std::io::BufReader::new(&result_file);
+
     // create buf reader and writer
-    let mut result_in = std::io::BufReader::new(if build_settings.continue_file {
-        Box::new(&result_file) as Box<dyn Read>
+    let result_in = if build_settings.continue_file {
+        Some(&mut reader)
     } else {
-        Box::new(std::io::empty()) as Box<dyn Read>
-    });
+        None
+    };
     let mut result_out = std::io::BufWriter::new(&result_file);
 
     let mut save_file = HashTreeFile::new(
         &mut result_out,
-        &mut result_in,
+        result_in,
         build_settings.hash_type,
         false,
         true,
@@ -128,15 +132,56 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         process::exit(1);
     }));
 
-    let mut planner = JobPlanner::new(threads, &build_settings);
+    let (result_sender, result_receiver) = channel();
+
+    drop(save_file);
+    drop(result_out);
+
+    let result_file_cloned = match result_file.try_clone() {
+        Ok(file) => file,
+        Err(err) => {
+            return Err(anyhow!("Failed to clone result file handle: {}", err));
+        }
+    };
+    std::thread::spawn(move || {
+        let mut result_out = std::io::BufWriter::new(result_file_cloned);
+
+        if let Err(err) = result_out.seek(SeekFrom::End(0)) {
+            eprintln!("Failed to seek to end of result file: {err}");
+            process::exit(1);
+        }
+
+        writeln!(result_out, "").unwrap_or_else(|err| {
+            eprintln!("Failed to write to result file: {err}");
+            process::exit(1);
+        });
+
+        let save_file = HashTreeFile::new(
+            &mut result_out,
+            None::<&mut std::io::BufReader<std::fs::File>>,
+            build_settings.hash_type,
+            false,
+            false,
+            false,
+        );
+
+        while let Ok(data) = result_receiver.recv() {
+            save_file.write_entry(&data).unwrap_or_else(|err| {
+                eprintln!("Failed to write entry to result file: {err}");
+                process::exit(1);
+            });
+        }
+    });
+
+    let mut planner = JobPlanner::new(threads, &build_settings, &file_by_hash, result_sender);
 
     for root_file in build_settings.directory.iter() {
         planner.schedule_initial_job(root_file.clone());
     }
 
-    planner.run();
-
-    Ok(())
+    planner.run().map_err(|(path, reason)| {
+        anyhow!("Building hash tree failed on {path:?} because {reason:?}")
+    })
 }
 
 #[derive(Debug)]
@@ -192,12 +237,12 @@ impl JobResultBuilder {
 
 #[derive(Debug, Clone)]
 pub enum BuildJobData {
-    DiscoverDirectory(PathBuf),
-    HashFile(PathBuf),
-    HashSymlink(PathBuf),
-    DirectoryStub(PathBuf),
+    DiscoverDirectory(DirectoryEntry),
+    HashFile(DirectoryEntry),
+    HashSymlink(DirectoryEntry),
+    DirectoryStub(DirectoryEntry),
     HashDirectory {
-        path: PathBuf,
+        info: DirectoryEntry,
         children: Vec<GeneralHash>,
     },
     Initial(PathBuf),
@@ -206,12 +251,22 @@ pub enum BuildJobData {
 impl BuildJobData {
     pub fn path(&self) -> &PathBuf {
         match self {
-            BuildJobData::DiscoverDirectory(path) => path,
-            BuildJobData::DirectoryStub(path) => path,
-            BuildJobData::HashFile(path) => path,
-            BuildJobData::HashSymlink(path) => path,
-            BuildJobData::HashDirectory { path, .. } => path,
+            BuildJobData::DiscoverDirectory(info) => &info.path,
+            BuildJobData::DirectoryStub(info) => &info.path,
+            BuildJobData::HashFile(info) => &info.path,
+            BuildJobData::HashSymlink(info) => &info.path,
+            BuildJobData::HashDirectory { info, .. } => &info.path,
             BuildJobData::Initial(path) => path,
+        }
+    }
+    pub fn entry(&self) -> Option<&DirectoryEntry> {
+        match self {
+            BuildJobData::DiscoverDirectory(info) => Some(info),
+            BuildJobData::DirectoryStub(info) => Some(info),
+            BuildJobData::HashFile(info) => Some(info),
+            BuildJobData::HashSymlink(info) => Some(info),
+            BuildJobData::HashDirectory { info, .. } => Some(info),
+            BuildJobData::Initial(_) => None,
         }
     }
 }
@@ -228,27 +283,35 @@ impl ResultTrait for JobResult {}
 #[derive(Debug)]
 pub enum JobResultData {
     DirectoryListing {
-        path: PathBuf,
+        info: DirectoryEntry,
         children: Vec<DirectoryEntry>,
     },
     FileHash {
-        path: PathBuf,
+        info: DirectoryEntry,
         hash: GeneralHash,
         size: u64,
     },
     ArchiveHash {
-        path: PathBuf,
+        info: DirectoryEntry,
         size: u64,
         file_hash: GeneralHash,
         children: Vec<ArchiveFile>,
         content_directory_hash: GeneralHash,
     },
+    CachedArchiveHash {
+        info: DirectoryEntry,
+        size: u64,
+        file_hash: GeneralHash,
+        children: Vec<GeneralHash>,
+        content_directory_hash: GeneralHash,
+    },
     DirectoryHash {
-        path: PathBuf,
+        info: DirectoryEntry,
         hash: GeneralHash,
+        children: Vec<GeneralHash>,
     },
     SymlinkHash {
-        path: PathBuf,
+        info: DirectoryEntry,
         hash: GeneralHash,
     },
     Error {
@@ -257,28 +320,146 @@ pub enum JobResultData {
         reason: String,
     },
     Other {
-        path: PathBuf,
+        info: DirectoryEntry,
         hash: GeneralHash,
     },
-    InitialEvaluation(DirectoryEntry),
+    InitialEvaluation {
+        info: DirectoryEntry,
+    },
 }
 
 impl JobResultData {
     pub fn path(&self) -> &PathBuf {
         match self {
-            JobResultData::DirectoryListing { path, .. } => path,
-            JobResultData::FileHash { path, .. } => path,
-            JobResultData::ArchiveHash { path, .. } => path,
-            JobResultData::DirectoryHash { path, .. } => path,
-            JobResultData::SymlinkHash { path, .. } => path,
+            JobResultData::DirectoryListing { info, .. } => &info.path,
+            JobResultData::FileHash { info, .. } => &info.path,
+            JobResultData::ArchiveHash { info, .. } => &info.path,
+            JobResultData::CachedArchiveHash { info, .. } => &info.path,
+            JobResultData::DirectoryHash { info, .. } => &info.path,
+            JobResultData::SymlinkHash { info, .. } => &info.path,
             JobResultData::Error { path, .. } => path,
-            JobResultData::Other { path, .. } => path,
-            JobResultData::InitialEvaluation(entry) => &entry.path,
+            JobResultData::Other { info, .. } => &info.path,
+            JobResultData::InitialEvaluation { info } => &info.path,
+        }
+    }
+    pub fn entry(&self) -> Option<&DirectoryEntry> {
+        match self {
+            JobResultData::DirectoryListing { info, .. } => Some(info),
+            JobResultData::FileHash { info, .. } => Some(info),
+            JobResultData::ArchiveHash { info, .. } => Some(info),
+            JobResultData::CachedArchiveHash { info, .. } => Some(info),
+            JobResultData::DirectoryHash { info, .. } => Some(info),
+            JobResultData::SymlinkHash { info, .. } => Some(info),
+            JobResultData::Error { .. } => None,
+            JobResultData::Other { info, .. } => Some(info),
+            JobResultData::InitialEvaluation { info, .. } => Some(info),
+        }
+    }
+    pub fn hash_tree_file_entry(&self) -> Vec<HashTreeFileEntry> {
+        match self {
+            JobResultData::DirectoryHash {
+                info,
+                hash,
+                children,
+            } => {
+                vec![HashTreeFileEntry {
+                    children: children.clone(),
+                    file_type: HashTreeFileEntryType::Directory,
+                    modified: info.modified,
+                    size: children.len() as u64,
+                    path: FilePath::from_realpath(&info.path),
+                    hash: hash.clone(),
+                    archive_inner_hash: None,
+                    archive_children: Vec::new(),
+                }]
+            }
+            JobResultData::ArchiveHash {
+                info,
+                file_hash,
+                children,
+                size,
+                content_directory_hash,
+            } => {
+                let mut result = Vec::new();
+                result.push(HashTreeFileEntry {
+                    archive_children: children
+                        .into_iter()
+                        .map(|child| child.get_file_hash().clone())
+                        .collect(),
+                    file_type: HashTreeFileEntryType::File,
+                    size: *size,
+                    modified: info.modified,
+                    children: vec![],
+                    archive_inner_hash: Some(content_directory_hash.clone()),
+                    hash: file_hash.clone(),
+                    path: FilePath::from_realpath(&info.path),
+                });
+
+                for child in children {
+                    result.extend(child.to_hash_file_entry());
+                }
+
+                result
+            }
+            JobResultData::CachedArchiveHash {
+                info,
+                file_hash,
+                children,
+                size,
+                content_directory_hash,
+            } => {
+                let mut result = Vec::new();
+                result.push(HashTreeFileEntry {
+                    archive_children: children.clone(),
+                    file_type: HashTreeFileEntryType::File,
+                    size: *size,
+                    modified: info.modified,
+                    children: vec![],
+                    archive_inner_hash: Some(content_directory_hash.clone()),
+                    hash: file_hash.clone(),
+                    path: FilePath::from_realpath(&info.path),
+                });
+
+                result
+            }
+            JobResultData::FileHash { info, hash, size } => vec![HashTreeFileEntry {
+                children: Vec::new(),
+                file_type: HashTreeFileEntryType::File,
+                modified: info.modified,
+                size: *size,
+                path: FilePath::from_realpath(&info.path),
+                hash: hash.clone(),
+                archive_inner_hash: None,
+                archive_children: Vec::new(),
+            }],
+            JobResultData::SymlinkHash { info, hash } => vec![HashTreeFileEntry {
+                children: Vec::new(),
+                file_type: HashTreeFileEntryType::Symlink,
+                modified: info.modified,
+                size: info.file_size,
+                path: FilePath::from_realpath(&info.path),
+                hash: hash.clone(),
+                archive_inner_hash: None,
+                archive_children: Vec::new(),
+            }],
+            JobResultData::Other { info, hash } => vec![HashTreeFileEntry {
+                children: Vec::new(),
+                file_type: HashTreeFileEntryType::Other,
+                modified: info.modified,
+                size: info.file_size,
+                archive_inner_hash: None,
+                archive_children: Vec::new(),
+                path: FilePath::from_realpath(&info.path),
+                hash: hash.clone(),
+            }],
+            JobResultData::InitialEvaluation { .. } => vec![],
+            JobResultData::DirectoryListing { .. } => vec![],
+            JobResultData::Error { .. } => vec![],
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FileType {
     File,
     Directory,
@@ -286,7 +467,7 @@ pub enum FileType {
     Other,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DirectoryEntry {
     pub path: PathBuf,
     pub modified: u64,

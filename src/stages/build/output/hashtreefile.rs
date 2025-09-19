@@ -4,8 +4,8 @@ use std::io::{BufRead, Write};
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use anyhow::Result;
-use log::{info, trace, warn};
+use anyhow::{anyhow, Result};
+use log::{trace, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::hash::{GeneralHash, GeneralHashType};
@@ -133,7 +133,7 @@ pub struct HashTreeFileEntryV1Ref<'a> {
 /// * `file_by_hash` - A map of files by their hash.
 /// * `file_by_path` - A map of files by their path.
 /// * `all_entries` - A list of all entries.
-pub struct HashTreeFile<'a, W, R>
+pub struct HashTreeFile<'write, 'read, W, R>
 where
     W: Write,
     R: BufRead,
@@ -151,12 +151,12 @@ where
     enable_file_by_path: bool,
     enable_all_entry_list: bool,
 
-    writer: RefCell<&'a mut W>,
+    writer: RefCell<&'write mut W>,
     written_bytes: RefCell<usize>,
-    reader: RefCell<&'a mut R>,
+    reader: Option<RefCell<&'read mut R>>,
 }
 
-impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
+impl<'write, 'read, W: Write, R: BufRead> HashTreeFile<'write, 'read, W, R> {
     /// Create a new hash tree file.
     ///
     /// If not writing a new header hash_type can be set to GeneralHashType::NULL.
@@ -172,8 +172,8 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
     /// # Returns
     /// The created hash tree file interface.
     pub fn new(
-        writer: &'a mut W,
-        reader: &'a mut R,
+        writer: &'write mut W,
+        reader: Option<&'read mut R>,
         hash_type: GeneralHashType,
         enable_file_by_hash: bool,
         enable_file_by_path: bool,
@@ -193,7 +193,7 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
             enable_file_by_path,
             enable_all_entry_list,
             writer: RefCell::new(writer),
-            reader: RefCell::new(reader),
+            reader: reader.map(RefCell::new),
             written_bytes: RefCell::new(0),
         }
     }
@@ -221,6 +221,8 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
     pub fn load_header(&mut self) -> Result<()> {
         let mut header_str = String::new();
         self.reader
+            .as_ref()
+            .ok_or(anyhow!("no reader set"))?
             .borrow_mut()
             .deref_mut()
             .read_line(&mut header_str)?;
@@ -257,6 +259,8 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
             let mut entry_str = String::new();
             let count = self
                 .reader
+                .as_ref()
+                .ok_or(anyhow!("no reader set"))?
                 .borrow_mut()
                 .deref_mut()
                 .read_line(&mut entry_str)?;
@@ -301,8 +305,8 @@ impl<'a, W: Write, R: BufRead> HashTreeFile<'a, W, R> {
                     None => {}
                     Some(old) => {
                         // this happens if analysis was canceled and continued
-                        // and an already analysed file changed
-                        info!("Duplicate entry for path: {:?}", &old.path);
+                        // or an already analysed file changed
+                        trace!("Duplicate entry for path: {:?}", &old.path);
                         if self.enable_all_entry_list {
                             self.all_entries.retain(|x| x != &old);
                         }

@@ -55,7 +55,7 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
 
     let mut save_file = HashTreeFile::new(
         &mut output_buf_writer,
-        &mut input_buf_reader,
+        Some(&mut input_buf_reader),
         GeneralHashType::NULL,
         false,
         true,
@@ -96,10 +96,7 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
 
             true
         }
-        Err(err) => {
-            warn!("File {:?} resolving failed: {}", entry.path, err);
-            true
-        }
+        Err(_err) => true,
     })?;
 
     // todo filter files deleted from inside archives

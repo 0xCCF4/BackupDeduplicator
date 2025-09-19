@@ -14,6 +14,7 @@ use std::fs::{File, Metadata};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
+use std::time::SystemTime;
 
 /// The argument for the worker main thread.
 ///
@@ -35,13 +36,19 @@ fn evaluate_file(id: usize, path: PathBuf, metadata: &Metadata) -> DirectoryEntr
     let modified = metadata
         .modified()
         .map(|m| {
-            m.elapsed().map(|e| e.as_secs()).unwrap_or_else(|e| {
-                error!("[{id}] Error calculating elapsed time: {e}. Using default value.");
-                0
-            })
+            m.duration_since(SystemTime::UNIX_EPOCH)
+                .map(|e| e.as_secs())
+                .unwrap_or_else(|e| {
+                    error!(
+                    "[{id}] Error calculating elapsed time for {path:?}: {e}. Using default value."
+                );
+                    0
+                })
         })
         .unwrap_or_else(|e| {
-            error!("[{id}] Error getting modification time: {e}. Using default value.");
+            error!(
+                "[{id}] Error getting modification time for {path:?}: {e}. Using default value."
+            );
             0
         });
 
@@ -80,15 +87,15 @@ pub fn worker_run(
     let result_builder = job.result();
 
     match job.data {
-        BuildJobData::DiscoverDirectory(directory_path) => {
-            let dir = match fs::read_dir(&directory_path) {
+        BuildJobData::DiscoverDirectory(info) => {
+            let dir = match fs::read_dir(&info.path) {
                 Ok(dir) => dir,
                 Err(e) => {
-                    error!("[{id}] Error reading directory {directory_path:?}: {e}.");
+                    error!("[{id}] Error reading directory {:?}: {e}.", info.path);
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
-                            path: directory_path.clone(),
-                            occurred_at: directory_path,
+                            path: info.path.clone(),
+                            occurred_at: info.path,
                             reason: e.to_string(),
                         }))
                         .expect("Failed to send result");
@@ -102,11 +109,14 @@ pub fn worker_run(
                 let entry = match entry {
                     Ok(entry) => entry,
                     Err(e) => {
-                        error!("[{id}] Error reading directory entry of {directory_path:?}: {e}.");
+                        error!(
+                            "[{id}] Error reading directory entry of {:?}: {e}.",
+                            info.path
+                        );
                         result_publish
                             .send(result_builder.build(JobResultData::Error {
-                                occurred_at: directory_path.clone(),
-                                path: directory_path,
+                                occurred_at: info.path.clone(),
+                                path: info.path,
                                 reason: e.to_string(),
                             }))
                             .expect("Failed to send result");
@@ -134,20 +144,17 @@ pub fn worker_run(
             children.sort_by(|a, b| a.path.cmp(&b.path));
 
             result_publish
-                .send(result_builder.build(JobResultData::DirectoryListing {
-                    children,
-                    path: directory_path,
-                }))
+                .send(result_builder.build(JobResultData::DirectoryListing { children, info }))
                 .expect("Failed to send result");
         }
-        BuildJobData::HashFile(path) => {
-            let stream = match File::open(&path) {
+        BuildJobData::HashFile(info) => {
+            let stream = match File::open(&info.path) {
                 Err(err) => {
-                    error!("Error while opening file {:?}: {}", path, err);
+                    error!("Error while opening file {:?}: {}", info.path, err);
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
-                            occurred_at: path.clone(),
-                            path,
+                            occurred_at: info.path.clone(),
+                            path: info.path,
                             reason: err.to_string(),
                         }))
                         .expect("Failed to send result");
@@ -186,7 +193,7 @@ pub fn worker_run(
                         let stream = compression_type.open(&mut stream);
                         Ok(Some(worker_run_archive(
                             stream,
-                            &FilePath::from_realpath(&path),
+                            &FilePath::from_realpath(&info.path),
                             archive_type,
                             &mut WorkerRunArchiveArguments { id, arg },
                         )))
@@ -196,11 +203,14 @@ pub fn worker_run(
 
             let archive_contents = match archive_contents {
                 Err(err) => {
-                    error!("[{}] Error while probing file for archive: {}", id, err);
+                    error!(
+                        "[{}] Error while probing file {:?} for archive: {}",
+                        id, info.path, err
+                    );
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
-                            occurred_at: path.clone(),
-                            path,
+                            occurred_at: info.path.clone(),
+                            path: info.path,
                             reason: err.to_string(),
                         }))
                         .expect("Failed to send result");
@@ -210,11 +220,14 @@ pub fn worker_run(
             };
 
             if let Err(err) = stream.read_to_end_discarding() {
-                error!("[{id}] Error while reading file: {err}. Skipping.");
+                error!(
+                    "[{id}] Error while reading file {:?}: {err}. Skipping.",
+                    info.path
+                );
                 result_publish
                     .send(result_builder.build(JobResultData::Error {
-                        occurred_at: path.clone(),
-                        path,
+                        occurred_at: info.path.clone(),
+                        path: info.path,
                         reason: err.to_string(),
                     }))
                     .expect("Failed to send result");
@@ -224,11 +237,11 @@ pub fn worker_run(
             let size = length_counter.length();
 
             let file = match archive_contents {
-                None => JobResultData::FileHash { hash, path, size },
+                None => JobResultData::FileHash { hash, info, size },
                 Some(archive_result) => match archive_result {
                     Err(err) => {
-                        error!("[{id}] Error while processing archive: {err}. Regarding as non-archive.");
-                        JobResultData::FileHash { hash, path, size }
+                        error!("[{id}] Error while processing archive {:?}: {err}. Regarding as non-archive.", info.path);
+                        JobResultData::FileHash { hash, info, size }
                     }
                     Ok(mut archive_result) => {
                         let directory_hash = {
@@ -248,7 +261,7 @@ pub fn worker_run(
                             content_directory_hash: directory_hash,
                             file_hash: hash,
                             size,
-                            path,
+                            info,
                         }
                     }
                 },
@@ -258,7 +271,7 @@ pub fn worker_run(
                 .send(result_builder.build(file))
                 .expect("Failed to send result");
         }
-        BuildJobData::HashDirectory { path, children } => {
+        BuildJobData::HashDirectory { info, children } => {
             let mut sorted = children.clone();
             sorted.sort_by(|a, b| {
                 a.partial_cmp(b)
@@ -268,22 +281,26 @@ pub fn worker_run(
             let _ = hash.hash_directory(sorted.iter());
 
             result_publish
-                .send(result_builder.build(JobResultData::DirectoryHash { path, hash }))
+                .send(result_builder.build(JobResultData::DirectoryHash {
+                    info,
+                    hash,
+                    children,
+                }))
                 .expect("Failed to send result");
         }
-        BuildJobData::HashSymlink(path) => {
+        BuildJobData::HashSymlink(info) => {
             let mut hash = GeneralHash::from_type(arg.hash_type);
-            hash.hash_path(&path);
+            hash.hash_path(&info.path);
 
             result_publish
-                .send(result_builder.build(JobResultData::SymlinkHash { hash, path }))
+                .send(result_builder.build(JobResultData::SymlinkHash { hash, info }))
                 .expect("Failed to send result");
         }
         BuildJobData::Initial(path) => {
             let metadata = match path.metadata() {
                 Ok(metadata) => metadata,
                 Err(e) => {
-                    error!("[{id}] Error reading metadata: {e}. Skipping.");
+                    error!("[{id}] Error reading metadata from {path:?}: {e}.");
                     result_publish
                         .send(result_builder.build(JobResultData::Error {
                             occurred_at: path.clone(),
@@ -298,15 +315,15 @@ pub fn worker_run(
             let file = evaluate_file(id, path.clone(), &metadata);
 
             result_publish
-                .send(result_builder.build(JobResultData::InitialEvaluation(file)))
+                .send(result_builder.build(JobResultData::InitialEvaluation { info: file }))
                 .expect("Failed to send result");
         }
-        BuildJobData::DirectoryStub(path) => {
+        BuildJobData::DirectoryStub(info) => {
             error!("[{id}] Received unexpected DirectoryStub job. This should not have happened.");
             result_publish
                 .send(result_builder.build(JobResultData::Error {
-                    occurred_at: path.clone(),
-                    path,
+                    occurred_at: info.path.clone(),
+                    path: info.path,
                     reason: "Unexpected DirectoryStub job".to_string(),
                 }))
                 .expect("Failed to send result");

@@ -1,15 +1,17 @@
 use crate::hash::GeneralHash;
+use crate::path::FilePath;
 use crate::pool::ThreadPool;
 use crate::shallow_ref_tree;
 use crate::shallow_ref_tree::{DebugGraph, NodeId, ShallowRefTree};
 use crate::stages::build::cmd::worker::{worker_run, WorkerArgument};
 use crate::stages::build::cmd::{
-    BuildJob, BuildJobData, BuildSettings, FileType, JobResult, JobResultData,
+    BuildJob, BuildJobData, BuildSettings, DirectoryEntry, FileType, JobResult, JobResultData,
 };
+use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 use log::{error, info, trace, warn};
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs::File;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 
 #[derive(Debug)]
 enum JobTreeData {
@@ -55,6 +57,11 @@ impl JobTreeData {
             .map(|x| x.path())
             .or(self.result().map(|x| x.path()))
     }
+    pub fn entry(&self) -> Option<&DirectoryEntry> {
+        self.job()
+            .and_then(|x| x.entry())
+            .or(self.result().and_then(|x| x.entry()))
+    }
     pub fn job(&self) -> Option<&BuildJobData> {
         match self {
             JobTreeData::BlockedByChildren(job)
@@ -85,12 +92,15 @@ impl JobTreeData {
     }
 }
 
-pub struct JobPlanner {
+pub struct JobPlanner<'a> {
     tree: ShallowRefTree<JobTreeData>,
     scheduled_jobs: BTreeSet<shallow_ref_tree::NodeId>,
     running_jobs: BTreeMap<u64, shallow_ref_tree::NodeId>,
 
     pool: ThreadPool<BuildJob, JobResult>,
+
+    cache: &'a HashMap<FilePath, HashTreeFileEntry>,
+    result_sender: Sender<HashTreeFileEntry>,
 
     _debug_dotfiles: u32,
 }
@@ -104,8 +114,13 @@ pub enum ScheduleJobsResult {
     Ok,
 }
 
-impl JobPlanner {
-    pub fn new(number_of_threads: usize, settings: &BuildSettings) -> Self {
+impl<'a> JobPlanner<'a> {
+    pub fn new(
+        number_of_threads: usize,
+        settings: &BuildSettings,
+        cache: &'a HashMap<FilePath, HashTreeFileEntry>,
+        result_sender: Sender<HashTreeFileEntry>,
+    ) -> Self {
         let mut args = Vec::with_capacity(number_of_threads);
         for _ in 0..args.capacity() {
             args.push(WorkerArgument {
@@ -121,6 +136,9 @@ impl JobPlanner {
             running_jobs: BTreeMap::new(),
             tree,
             scheduled_jobs: BTreeSet::new(),
+
+            cache,
+            result_sender,
 
             pool: ThreadPool::new(args, worker_run),
             _debug_dotfiles: 0,
@@ -150,17 +168,19 @@ impl JobPlanner {
         };
 
         trace!("[RECEIVE] Processing job results: {result:?}");
-        if let Err(err) = self.save_dotfile() {
-            error!("{err:?}");
-        }
 
         match result.result {
             x @ JobResultData::ArchiveHash { .. }
+            | x @ JobResultData::CachedArchiveHash { .. }
             | x @ JobResultData::SymlinkHash { .. }
             | x @ JobResultData::DirectoryHash { .. }
             | x @ JobResultData::FileHash { .. }
             | x @ JobResultData::Other { .. }
             | x @ JobResultData::Error { .. } => {
+                for data in x.hash_tree_file_entry() {
+                    let _ = self.result_sender.send(data);
+                }
+
                 let node = self.tree.node_mut(result.node_id).expect("node must exist");
                 node.content = JobTreeData::Finished(x);
                 trace!("- mark finished");
@@ -172,31 +192,59 @@ impl JobPlanner {
                     trace!("- schedule parent {}", parent.id());
                 }
             }
-            JobResultData::DirectoryListing { path, children } => {
+            JobResultData::DirectoryListing { info, children } => {
                 let mut blocking = false;
                 for entry in children {
                     match entry.file_type {
                         FileType::Directory => {
                             self.schedule_child(
                                 result.node_id,
-                                BuildJobData::DiscoverDirectory(entry.path),
+                                BuildJobData::DiscoverDirectory(entry),
                             );
                             blocking = true;
                         }
                         FileType::File => {
-                            self.schedule_child(result.node_id, BuildJobData::HashFile(entry.path));
+                            if let Some(cached) =
+                                self.cache.get(&FilePath::from_realpath(&entry.path))
+                            {
+                                if cached.modified == entry.modified
+                                    && cached.size == entry.file_size
+                                    && cached.file_type == HashTreeFileEntryType::File
+                                {
+                                    trace!("- using cached hash for file {:?}", entry.path);
+                                    let data = if let Some(archive_inner_hash) =
+                                        &cached.archive_inner_hash
+                                    {
+                                        JobResultData::CachedArchiveHash {
+                                            size: cached.size,
+                                            children: cached.archive_children.clone(),
+                                            file_hash: cached.hash.clone(),
+                                            content_directory_hash: archive_inner_hash.clone(),
+                                            info: entry,
+                                        }
+                                    } else {
+                                        JobResultData::FileHash {
+                                            size: cached.size,
+                                            hash: cached.hash.clone(),
+                                            info: entry,
+                                        }
+                                    };
+                                    let child = JobTreeData::Finished(data);
+                                    self.tree.add_child(result.node_id, child);
+                                    continue;
+                                }
+                            }
+
+                            self.schedule_child(result.node_id, BuildJobData::HashFile(entry));
                             blocking = true;
                         }
                         FileType::Symlink => {
-                            self.schedule_child(
-                                result.node_id,
-                                BuildJobData::HashSymlink(entry.path),
-                            );
+                            self.schedule_child(result.node_id, BuildJobData::HashSymlink(entry));
                             blocking = true;
                         }
                         FileType::Other => {
                             let child = JobTreeData::Finished(JobResultData::Other {
-                                path: entry.path,
+                                info: entry,
                                 hash: GeneralHash::NULL,
                             });
                             self.tree.add_child(result.node_id, child);
@@ -205,7 +253,7 @@ impl JobPlanner {
                 }
 
                 let node = self.tree.node_mut(result.node_id).expect("node must exist");
-                node.content = JobTreeData::BlockedByChildren(BuildJobData::DirectoryStub(path));
+                node.content = JobTreeData::BlockedByChildren(BuildJobData::DirectoryStub(info));
 
                 trace!("- set blocked");
 
@@ -214,27 +262,53 @@ impl JobPlanner {
                     trace!("- schedule node");
                 }
             }
-            JobResultData::InitialEvaluation(entry) => {
+            JobResultData::InitialEvaluation { info } => {
                 let node = self.tree.node_mut(result.node_id).expect("node must exist");
-                match entry.file_type {
+                match info.file_type {
                     FileType::Directory => {
                         node.content =
-                            JobTreeData::NotScheduled(BuildJobData::DiscoverDirectory(entry.path));
+                            JobTreeData::NotScheduled(BuildJobData::DiscoverDirectory(info));
                         self.scheduled_jobs.insert(result.node_id);
                     }
                     FileType::File => {
-                        node.content =
-                            JobTreeData::NotScheduled(BuildJobData::HashFile(entry.path));
+                        if let Some(cached) = self.cache.get(&FilePath::from_realpath(&info.path)) {
+                            if cached.modified == info.modified
+                                && cached.size == info.file_size
+                                && cached.file_type == HashTreeFileEntryType::File
+                            {
+                                trace!("- using cached hash for file {:?}", info.path);
+                                let result =
+                                    if let Some(archive_inner_hash) = &cached.archive_inner_hash {
+                                        JobResultData::CachedArchiveHash {
+                                            size: cached.size,
+                                            children: cached.archive_children.clone(),
+                                            file_hash: cached.hash.clone(),
+                                            content_directory_hash: archive_inner_hash.clone(),
+                                            info,
+                                        }
+                                    } else {
+                                        JobResultData::FileHash {
+                                            size: cached.size,
+                                            hash: cached.hash.clone(),
+                                            info,
+                                        }
+                                    };
+                                node.content = JobTreeData::Finished(result);
+                                self.scheduled_jobs.insert(self.tree.root_id);
+                                return;
+                            }
+                        }
+
+                        node.content = JobTreeData::NotScheduled(BuildJobData::HashFile(info));
                         self.scheduled_jobs.insert(result.node_id);
                     }
                     FileType::Symlink => {
-                        node.content =
-                            JobTreeData::NotScheduled(BuildJobData::HashSymlink(entry.path));
+                        node.content = JobTreeData::NotScheduled(BuildJobData::HashSymlink(info));
                         self.scheduled_jobs.insert(result.node_id);
                     }
                     FileType::Other => {
                         node.content = JobTreeData::Finished(JobResultData::Other {
-                            path: entry.path,
+                            info,
                             hash: GeneralHash::NULL,
                         });
                         self.scheduled_jobs.insert(self.tree.root_id);
@@ -248,9 +322,6 @@ impl JobPlanner {
         let jobs = std::mem::take(&mut self.scheduled_jobs);
 
         for node_id in jobs {
-            if let Err(err) = self.save_dotfile() {
-                error!("{err:?}");
-            }
             let node = self.tree.node(node_id);
             if let Some(node) = node {
                 trace!("[SCHEDULE] {:?}", node);
@@ -277,6 +348,7 @@ impl JobPlanner {
                                 for child in children_nodes.flatten() {
                                     match child {
                                         JobResultData::ArchiveHash { file_hash, .. }
+                                        | JobResultData::CachedArchiveHash { file_hash, .. }
                                         | JobResultData::SymlinkHash {
                                             hash: file_hash, ..
                                         }
@@ -300,12 +372,12 @@ impl JobPlanner {
                                                 Some((occurred_at.clone(), reason.clone()));
                                             break;
                                         }
-                                        JobResultData::DirectoryListing { path, children: _ } => {
-                                            error_found = Some((path.clone(), "Parent was evaluated and child did not hash properly".to_string()));
+                                        JobResultData::DirectoryListing { info, children: _ } => {
+                                            error_found = Some((info.path.clone(), "Parent was evaluated and child did not hash properly".to_string()));
                                             break;
                                         }
-                                        JobResultData::InitialEvaluation(entry) => {
-                                            error_found = Some((entry.path.clone(), "Parent was evaluated and child was of initial eval type".to_string()));
+                                        JobResultData::InitialEvaluation { info } => {
+                                            error_found = Some((info.path.clone(), "Parent was evaluated and child was of initial eval type".to_string()));
                                             break;
                                         }
                                     }
@@ -335,11 +407,11 @@ impl JobPlanner {
                                     continue;
                                 }
 
-                                if let Some(path) = node.content.path() {
+                                if let Some(info) = node.content.entry() {
                                     // not some for Root
                                     trace!("- prepare parent dir hash");
                                     let directory_job = BuildJobData::HashDirectory {
-                                        path: path.clone(),
+                                        info: info.clone(),
                                         children: hashes.into_iter().cloned().collect(),
                                     };
                                     let node =
@@ -451,13 +523,5 @@ impl JobPlanner {
                 }
             }
         }
-    }
-
-    pub fn save_dotfile(&mut self) -> Result<(), std::io::Error> {
-        self._debug_dotfiles += 1;
-        let id = self._debug_dotfiles;
-
-        let mut file = File::create(format!("/tmp/tree/{id:04}.dot"))?;
-        self.tree.to_dotfile(&mut file)
     }
 }
