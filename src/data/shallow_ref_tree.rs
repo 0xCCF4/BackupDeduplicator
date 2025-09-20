@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{Debug, Display};
 use std::io::Write;
 use std::ops::Deref;
@@ -172,6 +172,19 @@ impl<Node> ShallowRefTree<Node> {
     }
     pub fn node_mut<I: Into<NodeId>>(&mut self, node: I) -> Option<&mut TreeNode<Node>> {
         self.nodes.get_mut(&node.into())
+    }
+    pub fn remove_children<I: Into<NodeId>>(&mut self, node: I) {
+        let mut remove_queue = VecDeque::new();
+        remove_queue.push_back(node.into());
+
+        while let Some(node_id) = remove_queue.pop_front() {
+            self.nodes.remove(&node_id);
+            if let Some(children) = self.children(node_id) {
+                remove_queue.extend(children.into_iter());
+            }
+            self.child_ref.remove(&node_id);
+            self.parent_ref.remove(&node_id);
+        }
     }
 }
 

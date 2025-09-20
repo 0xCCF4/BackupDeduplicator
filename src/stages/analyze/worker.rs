@@ -42,6 +42,26 @@ pub struct AnalysisJob {
     pub file: Arc<HashTreeFileEntry>,
 }
 
+impl PartialEq for AnalysisJob {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for AnalysisJob {}
+
+impl PartialOrd for AnalysisJob {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AnalysisJob {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
 impl AnalysisJob {
     /// Create a new analysis job.
     ///

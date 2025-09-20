@@ -1,3 +1,4 @@
+use crate::priority_sender::{PriorityReceiver, PrioritySender};
 use log::{debug, error, trace, warn};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{mpsc, Arc, Mutex};
@@ -53,12 +54,12 @@ impl Worker {
     /// # Returns
     /// * `Worker` - The worker struct with the worker thread handle.
     fn new<
-        Job: JobTrait + Send + 'static,
+        Job: JobTrait + Send + Ord + 'static,
         Result: ResultTrait + Send + 'static,
         Argument: Send + 'static,
     >(
         id: usize,
-        job_receive: Arc<Mutex<Receiver<Job>>>,
+        job_receive: Arc<Mutex<PriorityReceiver<Job>>>,
         result_publish: Sender<Result>,
         func: WorkerEntry<Job, Result, Argument>,
         arg: Argument,
@@ -82,12 +83,12 @@ impl Worker {
     /// * `func` - The worker entry function to process jobs.
     /// * `arg` - The arguments passed to the worker thread via the thread pool creation.
     fn worker_entry<
-        Job: JobTrait + Send + 'static,
+        Job: JobTrait + Send + Ord + 'static,
         Result: ResultTrait + Send + 'static,
         Argument: Send + 'static,
     >(
         id: usize,
-        job_receive: Arc<Mutex<Receiver<Job>>>,
+        job_receive: Arc<Mutex<PriorityReceiver<Job>>>,
         result_publish: Sender<Result>,
         func: WorkerEntry<Job, Result, Argument>,
         mut arg: Argument,
@@ -130,15 +131,17 @@ impl Worker {
 /// Both `Job` and `Result` must implement the `Send` trait.
 pub struct ThreadPool<Job, Result>
 where
-    Job: Send,
+    Job: Send + Ord,
     Result: Send,
 {
     workers: Vec<Worker>,
-    job_publish: Option<Sender<Job>>,
+    job_publish: Option<PrioritySender<Job>>,
     result_receive: Receiver<Result>,
 }
 
-impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> ThreadPool<Job, Result> {
+impl<Job: Send + JobTrait + Ord + 'static, Result: Send + ResultTrait + 'static>
+    ThreadPool<Job, Result>
+{
     /// Create a new thread pool with a given number of worker threads (args.len()).
     /// Each worker thread will receive an argument from the args vector. When a new job
     /// is published to the thread pool, the thread pool will distribute the job to the worker threads
@@ -162,7 +165,7 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
         let mut workers = Vec::with_capacity(args.len());
 
         let (result_publish, result_receive) = mpsc::channel();
-        let (job_publish, job_receive) = mpsc::channel();
+        let (job_publish, job_receive) = crate::priority_sender::channel();
 
         let job_receive = Arc::new(Mutex::new(job_receive));
 
@@ -254,7 +257,7 @@ impl<Job: Send + JobTrait + 'static, Result: Send + ResultTrait + 'static> Threa
     }
 }
 
-impl<Job: Send, Result: Send> Drop for ThreadPool<Job, Result> {
+impl<Job: Send + Ord, Result: Send> Drop for ThreadPool<Job, Result> {
     fn drop(&mut self) {
         drop(self.job_publish.take());
 

@@ -60,6 +60,7 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
         false,
         true,
         true,
+        true,
     );
     save_file.load_header()?;
 

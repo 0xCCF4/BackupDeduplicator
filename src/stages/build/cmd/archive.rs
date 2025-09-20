@@ -5,7 +5,7 @@ use crate::path::FilePath;
 use crate::stages::build::cmd::worker::{is_archive, WorkerArgument};
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -54,9 +54,9 @@ fn worker_run_entry<R: Read>(
     let path = match entry.path() {
         Ok(path) => path,
         Err(err) => {
-            error!(
-                "[{}] Error while reading archive entry path: {}",
-                context.id, err
+            debug!(
+                "[{}] Error while reading archive {:?} entry path: {}",
+                context.id, root_path, err
             );
             PathBuf::from(
                 String::from("bdd_unknown_")

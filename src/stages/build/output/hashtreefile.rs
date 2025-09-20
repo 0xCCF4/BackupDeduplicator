@@ -151,6 +151,8 @@ where
     enable_file_by_path: bool,
     enable_all_entry_list: bool,
 
+    load_archive_contents: bool,
+
     writer: RefCell<&'write mut W>,
     written_bytes: RefCell<usize>,
     reader: Option<RefCell<&'read mut R>>,
@@ -168,6 +170,7 @@ impl<'write, 'read, W: Write, R: BufRead> HashTreeFile<'write, 'read, W, R> {
     /// * `enable_file_by_hash` - Whether to enable the file by hash - hash map.
     /// * `enable_file_by_path` - Whether to enable the file by path - hash map.
     /// * `enable_all_entry_list` - Whether to enable the all entries list.
+    /// * `load_archive_contents` - Whether to load the archive contents when loading entries.
     ///
     /// # Returns
     /// The created hash tree file interface.
@@ -178,6 +181,7 @@ impl<'write, 'read, W: Write, R: BufRead> HashTreeFile<'write, 'read, W, R> {
         enable_file_by_hash: bool,
         enable_file_by_path: bool,
         enable_all_entry_list: bool,
+        load_archive_contents: bool,
     ) -> Self {
         let time = utils::get_time();
         HashTreeFile {
@@ -192,6 +196,7 @@ impl<'write, 'read, W: Write, R: BufRead> HashTreeFile<'write, 'read, W, R> {
             enable_file_by_hash,
             enable_file_by_path,
             enable_all_entry_list,
+            load_archive_contents,
             writer: RefCell::new(writer),
             reader: reader.map(RefCell::new),
             written_bytes: RefCell::new(0),
@@ -280,6 +285,11 @@ impl<'write, 'read, W: Write, R: BufRead> HashTreeFile<'write, 'read, W, R> {
                     && entry.hash.hash_type() == GeneralHashType::NULL)
             {
                 warn!("Hash type mismatch ignoring entry: {:?}", entry.path);
+                continue;
+            }
+
+            if entry.path.path.len() > 1 && !self.load_archive_contents {
+                trace!("Skipping archive contents... {}", entry.path);
                 continue;
             }
 

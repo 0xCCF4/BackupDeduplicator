@@ -31,10 +31,12 @@ sha2 = {  version = "0.11.0-pre.3", optional = true }
 flate2 = { version = "1.0.30", optional = true }
 xz2 = { version = "0.1.7", optional = true }
 tar = {  version = "0.4.40", optional = true }
-zip = { git = "https://github.com/0xCCF4/zip2", branch = "feature-read-from-seekable-stream", optional = true, features = ["chrono"] }
+zip = { git = "https://github.com/0xCCF4/zip2", rev = "1d3afa92", optional = true, features = ["chrono"] }
 chrono = { version = "0.4.38", optional = true }
 rand = "0.8.5"
 regex = "1.10.5"
+event-listener = "5.4.1"
+itertools = "0.14.0"
 
 [features]
 hash-sha1 = ["dep:sha1"]

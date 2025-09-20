@@ -55,7 +55,7 @@ fn worker_run_entry<R: Read>(
     let path = match entry.path() {
         Ok(path) => path,
         Err(err) => {
-            error!(
+            debug!(
                 "[{}] Error while reading archive entry path: {}",
                 context.id, err
             );

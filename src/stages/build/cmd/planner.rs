@@ -8,8 +8,11 @@ use crate::stages::build::cmd::{
     BuildJob, BuildJobData, BuildSettings, DirectoryEntry, FileType, JobResult, JobResultData,
 };
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
+use itertools::Itertools;
 use log::{error, info, trace, warn};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::btree_map::Entry;
+use std::collections::{hash_map, BTreeMap, BTreeSet, HashMap};
+use std::fs::File;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
@@ -99,7 +102,7 @@ pub struct JobPlanner<'a> {
 
     pool: ThreadPool<BuildJob, JobResult>,
 
-    cache: &'a HashMap<FilePath, HashTreeFileEntry>,
+    cache: &'a mut HashMap<FilePath, HashTreeFileEntry>,
     result_sender: Sender<HashTreeFileEntry>,
 
     _debug_dotfiles: u32,
@@ -118,7 +121,7 @@ impl<'a> JobPlanner<'a> {
     pub fn new(
         number_of_threads: usize,
         settings: &BuildSettings,
-        cache: &'a HashMap<FilePath, HashTreeFileEntry>,
+        cache: &'a mut HashMap<FilePath, HashTreeFileEntry>,
         result_sender: Sender<HashTreeFileEntry>,
     ) -> Self {
         let mut args = Vec::with_capacity(number_of_threads);
@@ -170,20 +173,44 @@ impl<'a> JobPlanner<'a> {
         trace!("[RECEIVE] Processing job results: {result:?}");
 
         match result.result {
-            x @ JobResultData::ArchiveHash { .. }
-            | x @ JobResultData::CachedArchiveHash { .. }
-            | x @ JobResultData::SymlinkHash { .. }
-            | x @ JobResultData::DirectoryHash { .. }
-            | x @ JobResultData::FileHash { .. }
-            | x @ JobResultData::Other { .. }
-            | x @ JobResultData::Error { .. } => {
+            mut x @ JobResultData::ArchiveHash { .. }
+            | mut x @ JobResultData::CachedArchiveHash { .. }
+            | mut x @ JobResultData::SymlinkHash { .. }
+            | mut x @ JobResultData::DirectoryHash { .. }
+            | mut x @ JobResultData::FileHash { .. }
+            | mut x @ JobResultData::Other { .. }
+            | mut x @ JobResultData::Error { .. } => {
                 for data in x.hash_tree_file_entry() {
                     let _ = self.result_sender.send(data);
+                }
+
+                // to free some memory space
+                if let JobResultData::ArchiveHash {
+                    file_hash,
+                    children,
+                    info,
+                    size,
+                    content_directory_hash,
+                } = x
+                {
+                    x = JobResultData::CachedArchiveHash {
+                        content_directory_hash,
+                        size,
+                        file_hash,
+                        info,
+                        children: children
+                            .into_iter()
+                            .map(|x| x.get_inner_hash().clone())
+                            .collect_vec(),
+                    };
                 }
 
                 let node = self.tree.node_mut(result.node_id).expect("node must exist");
                 node.content = JobTreeData::Finished(x);
                 trace!("- mark finished");
+
+                // to free some memory space
+                self.tree.remove_children(result.node_id);
 
                 if let Some(parent) = self.tree.parent_ref(result.node_id) {
                     if !parent.content.is_finished() {
@@ -194,6 +221,7 @@ impl<'a> JobPlanner<'a> {
             }
             JobResultData::DirectoryListing { info, children } => {
                 let mut blocking = false;
+                let mut cached_children = false;
                 for entry in children {
                     match entry.file_type {
                         FileType::Directory => {
@@ -204,9 +232,11 @@ impl<'a> JobPlanner<'a> {
                             blocking = true;
                         }
                         FileType::File => {
-                            if let Some(cached) =
-                                self.cache.get(&FilePath::from_realpath(&entry.path))
-                            {
+                            let cached_entry =
+                                self.cache.entry(FilePath::from_realpath(&entry.path));
+                            if let hash_map::Entry::Occupied(cached_entry) = cached_entry {
+                                let cached = cached_entry.get();
+
                                 if cached.modified == entry.modified
                                     && cached.size == entry.file_size
                                     && cached.file_type == HashTreeFileEntryType::File
@@ -229,6 +259,10 @@ impl<'a> JobPlanner<'a> {
                                             info: entry,
                                         }
                                     };
+
+                                    cached_children = true;
+                                    drop(cached_entry.remove());
+
                                     let child = JobTreeData::Finished(data);
                                     self.tree.add_child(result.node_id, child);
                                     continue;
@@ -261,6 +295,10 @@ impl<'a> JobPlanner<'a> {
                     self.scheduled_jobs.insert(result.node_id);
                     trace!("- schedule node");
                 }
+
+                if cached_children {
+                    self.cache.shrink_to_fit();
+                }
             }
             JobResultData::InitialEvaluation { info } => {
                 let node = self.tree.node_mut(result.node_id).expect("node must exist");
@@ -271,7 +309,10 @@ impl<'a> JobPlanner<'a> {
                         self.scheduled_jobs.insert(result.node_id);
                     }
                     FileType::File => {
-                        if let Some(cached) = self.cache.get(&FilePath::from_realpath(&info.path)) {
+                        let cached_entry = self.cache.entry(FilePath::from_realpath(&info.path));
+                        if let hash_map::Entry::Occupied(cached_entry) = cached_entry {
+                            let cached = cached_entry.get();
+
                             if cached.modified == info.modified
                                 && cached.size == info.file_size
                                 && cached.file_type == HashTreeFileEntryType::File
@@ -510,6 +551,7 @@ impl<'a> JobPlanner<'a> {
                         self.process_result(result);
                     }
                 }
+
                 return stopping_with;
             }
 

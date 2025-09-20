@@ -10,6 +10,8 @@ pub mod utils;
 /// Contains the thread pool implementation. Responsible to distribute jobs over several threads.
 pub mod pool;
 
+pub mod priority_sender;
+
 /// Contains the implementation of the main commands.
 pub mod stages {
     /// Contains the implementation of the analyze command.

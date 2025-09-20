@@ -6,6 +6,9 @@ use crate::stages::build::cmd::archive::ArchiveFile;
 use crate::stages::build::cmd::planner::JobPlanner;
 use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
+use itertools::Itertools;
+use log::info;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
 use std::io::{Seek, SeekFrom};
@@ -90,6 +93,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         false,
         true,
         false,
+        false,
     );
     match save_file.load_header() {
         Ok(_) => {}
@@ -122,6 +126,11 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
             Arc::into_inner(v).expect("There should be no further references to the entry"),
         );
     });
+
+    info!(
+        "Loaded {} existing entries from the hash tree file",
+        file_by_hash.len()
+    );
 
     let threads = build_settings.threads.unwrap_or_else(num_cpus::get);
 
@@ -163,6 +172,7 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
             false,
             false,
             false,
+            false,
         );
 
         while let Ok(data) = result_receiver.recv() {
@@ -173,9 +183,9 @@ pub fn run(build_settings: BuildSettings) -> Result<()> {
         }
     });
 
-    let mut planner = JobPlanner::new(threads, &build_settings, &file_by_hash, result_sender);
+    let mut planner = JobPlanner::new(threads, &build_settings, &mut file_by_hash, result_sender);
 
-    for root_file in build_settings.directory.iter() {
+    for root_file in build_settings.directory.iter().unique() {
         planner.schedule_initial_job(root_file.clone());
     }
 
@@ -217,6 +227,125 @@ impl BuildJob {
             job_id: self.job_id,
             node_id: self.node_id,
         }
+    }
+}
+
+impl PartialEq for BuildJob {
+    fn eq(&self, other: &Self) -> bool {
+        self.job_id == other.job_id
+    }
+}
+
+impl Eq for BuildJob {}
+
+impl PartialOrd for BuildJob {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BuildJob {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Directory first
+        if let (Some(self_entry), Some(other_entry)) = (self.data.entry(), other.data.entry()) {
+            if self_entry.file_type == FileType::Directory
+                && other_entry.file_type != FileType::Directory
+                && matches!(self.data, BuildJobData::HashDirectory { .. })
+            {
+                return Ordering::Greater;
+            }
+        }
+
+        // Depth first discovery
+        let components = self
+            .data
+            .path()
+            .components()
+            .count()
+            .cmp(&other.data.path().components().count());
+        if components != Ordering::Equal {
+            return components;
+        }
+
+        // File size - if coming from the same directory, larger files first
+        if self
+            .data
+            .path()
+            .components()
+            .take(self.data.path().components().count() - 1)
+            .eq(other
+                .data
+                .path()
+                .components()
+                .take(self.data.path().components().count() - 1))
+        {
+            if let (Some(self_entry), Some(other_entry)) = (self.data.entry(), other.data.entry()) {
+                if self_entry.file_type == FileType::File && other_entry.file_type == FileType::File
+                {
+                    let self_size = self_entry.file_size;
+                    let other_size = other_entry.file_size;
+
+                    let size_cmp = self_size.cmp(&other_size);
+
+                    if size_cmp != Ordering::Equal {
+                        return size_cmp;
+                    }
+                } else if self_entry.file_type == FileType::File {
+                    return Ordering::Greater;
+                }
+            }
+        }
+
+        self.data.path().cmp(other.data.path())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_job_ordering() {
+        let job1 = BuildJob::new(
+            BuildJobData::HashFile(DirectoryEntry {
+                file_size: 2,
+                modified: 2,
+                file_type: FileType::File,
+                path: PathBuf::from("/a/b/c"),
+            }),
+            11,
+        );
+        let job2 = BuildJob::new(
+            BuildJobData::HashFile(DirectoryEntry {
+                file_size: 1,
+                modified: 1,
+                file_type: FileType::File,
+                path: PathBuf::from("/a/b/c"),
+            }),
+            11,
+        );
+        assert!(job1 > job2);
+
+        let job1 = BuildJob::new(
+            BuildJobData::HashFile(DirectoryEntry {
+                file_size: 2,
+                modified: 2,
+                file_type: FileType::File,
+                path: PathBuf::from("/a/b/c/d"),
+            }),
+            11,
+        );
+        let job2 = BuildJob::new(
+            BuildJobData::HashFile(DirectoryEntry {
+                file_size: 99,
+                modified: 1,
+                file_type: FileType::File,
+                path: PathBuf::from("/a/b/c"),
+            }),
+            11,
+        );
+        assert!(job1 > job2);
     }
 }
 
@@ -459,7 +588,7 @@ impl JobResultData {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileType {
     File,
     Directory,

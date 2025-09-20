@@ -8,7 +8,7 @@ use crate::stages::build::cmd::{
     BuildJob, BuildJobData, DirectoryEntry, FileType, JobResult, JobResultData,
 };
 use anyhow::anyhow;
-use log::error;
+use log::{debug, error};
 use std::fs;
 use std::fs::{File, Metadata};
 use std::io::{BufReader, Read};
@@ -240,7 +240,7 @@ pub fn worker_run(
                 None => JobResultData::FileHash { hash, info, size },
                 Some(archive_result) => match archive_result {
                     Err(err) => {
-                        error!("[{id}] Error while processing archive {:?}: {err}. Regarding as non-archive.", info.path);
+                        debug!("[{id}] Error while processing archive {:?}: {err}. Regarding as non-archive.", info.path);
                         JobResultData::FileHash { hash, info, size }
                     }
                     Ok(mut archive_result) => {

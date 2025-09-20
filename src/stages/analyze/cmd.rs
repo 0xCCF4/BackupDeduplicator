@@ -83,6 +83,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         true,
         true,
         true,
+        true,
     );
     save_file.load_header()?;
 
