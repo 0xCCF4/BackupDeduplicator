@@ -487,7 +487,10 @@ impl<'a> JobPlanner<'a> {
                     }
                     JobTreeData::Root => {
                         trace!("- encountered root, checking exit condition");
-                        let immediate_children = self.tree.children_ref(self.tree.root_id).unwrap_or_default();
+                        let immediate_children = self
+                            .tree
+                            .children_ref(self.tree.root_id)
+                            .unwrap_or_default();
                         let mut finished = true;
                         for child in immediate_children {
                             match &child.content {

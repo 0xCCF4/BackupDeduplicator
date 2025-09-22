@@ -149,7 +149,7 @@ enum Command {
         /// Target directory
         #[arg(long, short)]
         target: String,
-    }
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -344,7 +344,7 @@ fn main() {
             working_directory,
             follow_symlinks,
             delete_archive_contents,
-            no_fs
+            no_fs,
         } => {
             let input = utils::main::parse_path(
                 input.as_str(),
@@ -381,7 +381,7 @@ fn main() {
                 root,
                 follow_symlinks,
                 delete_archive_contents,
-                no_fs
+                no_fs,
             }) {
                 Ok(_) => {
                     info!("Clean command completed successfully");
@@ -540,10 +540,7 @@ fn main() {
                 }
             }
         }
-        Command::Shadow {
-            source,
-            target
-        } => {
+        Command::Shadow { source, target } => {
             let source = utils::main::parse_path(
                 source.as_str(),
                 utils::main::ParsePathKind::AbsoluteExisting,

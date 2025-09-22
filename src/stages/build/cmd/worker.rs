@@ -297,7 +297,7 @@ pub fn worker_run(
                 .expect("Failed to send result");
         }
         BuildJobData::Initial(path) => {
-            let metadata = match path.metadata() {
+            let metadata = match path.symlink_metadata() {
                 Ok(metadata) => metadata,
                 Err(e) => {
                     error!("[{id}] Error reading metadata from {path:?}: {e}.");
