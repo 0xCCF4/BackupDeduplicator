@@ -3,6 +3,7 @@ use crate::stages::build::output::{HashTreeFile, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
 use log::{info, trace, warn};
 use std::fs;
+use std::ops::Deref;
 use std::path::PathBuf;
 
 /// Settings for the clean stage.
@@ -21,6 +22,10 @@ pub struct CleanSettings {
     pub root: Option<String>,
     /// Whether to follow symlinks when checking if files exist.
     pub follow_symlinks: bool,
+    /// Whether to delete all archive contents
+    pub delete_archive_contents: bool,
+    /// Dont check if file exists, just remove duplicates
+    pub no_fs: bool,
 }
 
 /// Run the clean command.
@@ -59,14 +64,18 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
         GeneralHashType::NULL,
         false,
         true,
-        true,
-        true,
+        false,
+        !clean_settings.delete_archive_contents,
     );
     save_file.load_header()?;
 
     // remove duplicates, remove deleted files
     save_file.load_all_entries(|entry| match entry.path.resolve_file() {
         Ok(path) => {
+            if clean_settings.no_fs {
+                return true;
+            }
+
             if !path.exists() {
                 return false;
             }
@@ -104,10 +113,19 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
 
     // save results
 
+    save_file.empty_file_by_hash();
+
     info!("Saving results to output file. Dont interrupt this process. It may corrupt the file.");
     save_file.save_header()?;
-    for entry in save_file.all_entries.iter() {
-        save_file.write_entry(entry)?;
+    for (_, entry) in save_file.file_by_path.iter() {
+        let mut owned = entry.deref().clone();
+
+        if clean_settings.delete_archive_contents {
+            owned.archive_inner_hash = None;
+            owned.archive_children.clear();
+        }
+
+        save_file.write_entry(&owned)?;
     }
 
     save_file.flush()?;

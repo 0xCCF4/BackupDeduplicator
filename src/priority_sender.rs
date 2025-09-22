@@ -1,7 +1,5 @@
-use event_listener::{Event, EventListener, Listener};
+use event_listener::{Event, Listener};
 use std::collections::BinaryHeap;
-use std::ops::DerefMut;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{RecvError, SendError, TryRecvError};
 use std::sync::{Arc, Mutex};
 

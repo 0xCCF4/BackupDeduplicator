@@ -8,7 +8,7 @@ use backup_deduplicator::stages::dedup::golden_model::cmd::{
 use backup_deduplicator::stages::execute::cmd::{
     ExecuteAction, ExecuteActionType, ExecuteSettings,
 };
-use backup_deduplicator::stages::{analyze, build, clean, dedup, execute};
+use backup_deduplicator::stages::{analyze, build, clean, dedup, execute, shadow};
 use backup_deduplicator::utils;
 use clap::{arg, Parser, Subcommand};
 use log::{debug, info, trace, LevelFilter};
@@ -89,6 +89,12 @@ enum Command {
         /// Follow symlinks, if set, the tool will not follow symlinks
         #[arg(long)]
         follow_symlinks: bool,
+        /// Delete all archive contents
+        #[arg(long)]
+        delete_archive_contents: bool,
+        /// Disable file exist look-ups
+        #[arg(long)]
+        no_fs: bool,
     },
     /// Find duplicates and output them as analysis result
     Analyze {
@@ -135,6 +141,15 @@ enum Command {
         #[arg()]
         files: Vec<String>,
     },
+    /// Create shadow directory. By hardlinking every file to the target directory
+    Shadow {
+        /// Source directory
+        #[arg(long, short)]
+        source: String,
+        /// Target directory
+        #[arg(long, short)]
+        target: String,
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -301,6 +316,8 @@ fn main() {
                             output,
                             root: None,
                             follow_symlinks,
+                            delete_archive_contents: false,
+                            no_fs: true,
                         }) {
                             Ok(_) => {
                                 info!("Clean command completed successfully");
@@ -326,6 +343,8 @@ fn main() {
             root,
             working_directory,
             follow_symlinks,
+            delete_archive_contents,
+            no_fs
         } => {
             let input = utils::main::parse_path(
                 input.as_str(),
@@ -361,6 +380,8 @@ fn main() {
                 output,
                 root,
                 follow_symlinks,
+                delete_archive_contents,
+                no_fs
             }) {
                 Ok(_) => {
                     info!("Clean command completed successfully");
@@ -518,6 +539,33 @@ fn main() {
                     std::process::exit(exitcode::SOFTWARE);
                 }
             }
+        }
+        Command::Shadow {
+            source,
+            target
+        } => {
+            let source = utils::main::parse_path(
+                source.as_str(),
+                utils::main::ParsePathKind::AbsoluteExisting,
+            );
+
+            if !source.exists() {
+                eprintln!("Source path does not exist: {:?}", source);
+                std::process::exit(exitcode::CONFIG);
+            }
+
+            let target = utils::main::parse_path(
+                target.as_str(),
+                utils::main::ParsePathKind::AbsoluteNonExisting,
+            );
+
+            if target.exists() {
+                eprintln!("Target path already exists: {:?}", target);
+                std::process::exit(exitcode::CONFIG);
+            }
+
+            shadow::cmd::run(source, target);
+            info!("Shadow command completed successfully");
         }
     }
 }

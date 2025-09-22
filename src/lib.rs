@@ -24,6 +24,7 @@ pub mod stages {
     pub mod dedup;
     /// Contains the implementation of the execute command.
     pub mod execute;
+    pub mod shadow;
 }
 
 mod data {

@@ -10,9 +10,7 @@ use crate::stages::build::cmd::{
 use crate::stages::build::output::{HashTreeFileEntry, HashTreeFileEntryType};
 use itertools::Itertools;
 use log::{error, info, trace, warn};
-use std::collections::btree_map::Entry;
 use std::collections::{hash_map, BTreeMap, BTreeSet, HashMap};
-use std::fs::File;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 
@@ -180,7 +178,7 @@ impl<'a> JobPlanner<'a> {
             | mut x @ JobResultData::FileHash { .. }
             | mut x @ JobResultData::Other { .. }
             | mut x @ JobResultData::Error { .. } => {
-                for data in x.hash_tree_file_entry() {
+                for data in x.hash_tree_file_entry().into_iter() {
                     let _ = self.result_sender.send(data);
                 }
 
@@ -209,15 +207,15 @@ impl<'a> JobPlanner<'a> {
                 node.content = JobTreeData::Finished(x);
                 trace!("- mark finished");
 
-                // to free some memory space
-                self.tree.remove_children(result.node_id);
-
                 if let Some(parent) = self.tree.parent_ref(result.node_id) {
                     if !parent.content.is_finished() {
                         self.scheduled_jobs.insert(parent.id());
                     }
                     trace!("- schedule parent {}", parent.id());
                 }
+
+                // to free some memory space
+                self.tree.remove_children(result.node_id);
             }
             JobResultData::DirectoryListing { info, children } => {
                 let mut blocking = false;
@@ -489,7 +487,7 @@ impl<'a> JobPlanner<'a> {
                     }
                     JobTreeData::Root => {
                         trace!("- encountered root, checking exit condition");
-                        let immediate_children = self.tree.children_ref(self.tree.root_id).unwrap();
+                        let immediate_children = self.tree.children_ref(self.tree.root_id).unwrap_or_default();
                         let mut finished = true;
                         for child in immediate_children {
                             match &child.content {
@@ -553,6 +551,15 @@ impl<'a> JobPlanner<'a> {
                 }
 
                 return stopping_with;
+            }
+
+            if self.running_jobs.is_empty() {
+                if self.scheduled_jobs.is_empty() {
+                    warn!("No scheduled jobs to run");
+                    return Err((PathBuf::new(), "Premature exit!".to_string()));
+                } else {
+                    continue;
+                }
             }
 
             match self.pool.receive() {
