@@ -33,7 +33,7 @@ use std::path::PathBuf;
 /// let path = FilePath::from_realpath(PathBuf::from("test.txt"));
 ///
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Default, Ord, PartialOrd)]
 pub struct FilePath {
     /// The path components.
     pub path: Vec<PathBuf>,

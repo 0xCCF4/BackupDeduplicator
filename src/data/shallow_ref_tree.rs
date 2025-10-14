@@ -71,14 +71,22 @@ impl<Node> Ord for TreeNode<Node> {
     }
 }
 
+/// A tree data structure.
 pub struct ShallowRefTree<Node> {
-    pub nodes: BTreeMap<NodeId, TreeNode<Node>>,
-    pub root_id: NodeId,
-    pub parent_ref: BTreeMap<NodeId, NodeId>,
-    pub child_ref: BTreeMap<NodeId, BTreeSet<NodeId>>,
+    nodes: BTreeMap<NodeId, TreeNode<Node>>,
+    root_id: NodeId,
+    parent_ref: BTreeMap<NodeId, NodeId>,
+    child_ref: BTreeMap<NodeId, BTreeSet<NodeId>>,
 }
 
 impl<Node> ShallowRefTree<Node> {
+    /// Create a new tree with the given root node.
+    ///
+    /// # Arguments
+    /// * `root` - The root node of the tree.
+    ///
+    /// # Returns
+    /// A new tree with the given root node.
     pub fn new<I: Into<TreeNode<Node>>>(root: I) -> Self {
         let root = root.into();
         let mut nodes = BTreeMap::new();
@@ -94,11 +102,53 @@ impl<Node> ShallowRefTree<Node> {
         }
     }
 
+    /// Returns the root node's id.
+    ///
+    /// # Returns
+    /// The root node's id.
+    pub fn root_id(&self) -> NodeId {
+        self.root_id
+    }
+
+    /// Returns the root node as reference
+    ///
+    /// # Returns
+    /// The root node.
+    pub fn root(&self) -> &TreeNode<Node> {
+        self.nodes.get(&self.root_id).expect("Root node must exist")
+    }
+
+    /// Returns the root node as mutable reference
+    ///
+    /// # Returns
+    /// The root node.
+    pub fn root_mut(&mut self) -> &mut TreeNode<Node> {
+        self.nodes
+            .get_mut(&self.root_id)
+            .expect("Root node must exist")
+    }
+
+    /// Check if the tree contains the given node. Comparison is achieved via the `NodeId`
+    ///
+    /// # Arguments
+    /// * `node` - The node to check for.
+    ///
+    /// # Returns
+    /// `true` if the tree contains the given node id
     pub fn contains<I: Into<NodeId>>(&self, node: I) -> bool {
         let id = node.into();
         self.nodes.contains_key(&id)
     }
 
+    /// Add a child node to the given parent node.
+    ///
+    /// # Arguments
+    /// * `child` the node to add to the tree
+    /// * `parent`the node to add the node as child to
+    ///
+    /// # Returns
+    /// * the id of the newly added node
+    /// * `None` if the parent was not found and the node was not added to the tree
     pub fn add_child<I: Into<TreeNode<Node>>>(
         &mut self,
         parent: NodeId,
@@ -122,21 +172,53 @@ impl<Node> ShallowRefTree<Node> {
         Some(id)
     }
 
+    /// Query the parent node id for a given node
+    ///
+    /// # Arguments
+    /// * `node` the node to search for the parent node
+    ///
+    /// # Returns
+    /// * `Some(NodeId)` if the parent was found
+    /// * `None` if the node is not part of the tree or if it is the root node
     pub fn parent<I: Into<NodeId>>(&self, node: I) -> Option<NodeId> {
         let id = node.into();
         self.parent_ref.get(&id).map(|node| node.clone())
     }
 
+    /// Query the parent node for a given node and return a reference to its contents.
+    ///
+    /// # Arguments
+    /// * `node` the node to search for the parent node
+    ///
+    /// # Returns
+    /// * `Some(&TreeNode<Node>)` if the parent was found
+    /// * `None` if the node is not part of the tree or if it is the root node
     pub fn parent_ref<I: Into<NodeId>>(&self, node: I) -> Option<&TreeNode<Node>> {
         let parent = self.parent(node)?;
         self.nodes.get(&parent)
     }
 
+    /// Query the parent node for a given node and return a mutable reference to its contents.
+    ///
+    /// # Arguments
+    /// * `node` the node to search for the parent node
+    ///
+    /// # Returns
+    /// * `Some(&mut TreeNode<Node>)` if the parent was found
+    /// * `None` if the node is not part of the tree or if it is the root node
     pub fn parent_mut<I: Into<NodeId>>(&mut self, node: I) -> Option<&mut TreeNode<Node>> {
         let parent = self.parent(node)?;
         self.nodes.get_mut(&parent)
     }
 
+    /// Query the children of the given node
+    ///
+    /// # Arguments
+    /// * `node` the node to search for children
+    ///
+    /// # Returns
+    /// * `Some(Vec<NodeId>)` the list of children node ids
+    /// * `None` if the node is not part of the tree
     pub fn children<I: Into<NodeId>>(&self, node: I) -> Option<Vec<NodeId>> {
         let id = node.into();
         self.child_ref
@@ -144,11 +226,32 @@ impl<Node> ShallowRefTree<Node> {
             .map(|node| node.iter().cloned().collect::<Vec<_>>())
     }
 
+    /// Query the children of the given node and return references to their contents.
+    ///
+    /// # Arguments
+    /// * `node` the node to search for children
+    ///
+    /// # Returns
+    /// * `Some(Vec<&TreeNode<Node>>)` the list of references to the children nodes
+    /// * `None` if the node is not part of the tree
     pub fn children_ref<I: Into<NodeId>>(&self, node: I) -> Option<Vec<&TreeNode<Node>>> {
         let children = self.children(node)?;
         children.into_iter().map(|id| self.nodes.get(&id)).collect()
     }
 
+    /// Query the children of the given node and return mutable references to their contents.
+    ///
+    /// # Arguments
+    /// * `node` the node to search for children
+    ///
+    /// # Returns
+    /// * `Some(Vec<&mut TreeNode<Node>>)` the list of mutable references to the children nodes
+    /// * `None` if the node is not part of the tree
+    ///
+    /// # Safety
+    /// This function exposes the mutable references and captures the &mut self reference until
+    /// the returned `TreeMutList` is dropped. This ensures that no other mutable references
+    /// to the tree can be created while the mutable references to the children are held.
     #[allow(elided_named_lifetimes)]
     pub fn children_mut<'a, I: Into<NodeId>>(&'a mut self, node: I) -> Option<TreeMutList<Node>> {
         let children = self.children(node)?;
@@ -167,12 +270,34 @@ impl<Node> ShallowRefTree<Node> {
         })
     }
 
+    /// Returns a reference to the node with the given id.
+    ///
+    /// # Arguments
+    /// * `node` the node id to search for
+    ///
+    /// # Returns
+    /// * `Some(&TreeNode<Node>)` if the node was found in the tree
+    /// * `None` if the node was not found in the tree
     pub fn node<I: Into<NodeId>>(&self, node: I) -> Option<&TreeNode<Node>> {
         self.nodes.get(&node.into())
     }
+
+    /// Returns a mutable reference to the node with the given id.
+    ///
+    /// # Arguments
+    /// * `node` the node id to search for
+    ///
+    /// # Returns
+    /// * `Some(&mut TreeNode<Node>)` if the node was found in the tree
+    /// * `None` if the node was not found in the tree
     pub fn node_mut<I: Into<NodeId>>(&mut self, node: I) -> Option<&mut TreeNode<Node>> {
         self.nodes.get_mut(&node.into())
     }
+
+    /// Remove a node and all its children (recursively) from the tree.
+    ///
+    /// # Arguments
+    /// * `node` the node to remove
     pub fn remove_children<I: Into<NodeId>>(&mut self, node: I) {
         let mut remove_queue = VecDeque::new();
         remove_queue.push_back(node.into());
@@ -191,6 +316,13 @@ impl<Node> ShallowRefTree<Node> {
 impl<Color: Display, Label: Display, Node: DebugGraph<Color = Color, Label = Label>>
     ShallowRefTree<Node>
 {
+    /// Export the tree to a dotfile for visualization purposes.
+    ///
+    /// # Arguments
+    /// * `stream` - The stream to write the dotfile contents to.
+    ///
+    /// # Errors
+    /// * If writing to the stream fails.
     pub fn to_dotfile<W: Write>(&self, stream: &mut W) -> Result<(), std::io::Error> {
         writeln!(stream, "digraph tree {{")?;
 
@@ -228,13 +360,21 @@ impl<Color: Display, Label: Display, Node: DebugGraph<Color = Color, Label = Lab
     }
 }
 
+/// When instantiating a tree with nodes of this trait, the tree can be exported to a dotfile
 pub trait DebugGraph {
+    /// The color type. Must implement the `Display` trait
     type Color;
+    /// The label type. Must implement the `Display` trait
     type Label;
+    /// Returns the color of that node for visualization purposes
     fn debug_color(&self) -> Option<Self::Color>;
+    /// Returns the label of that node for visualization purposes
     fn label(&self) -> Option<Self::Label>;
 }
 
+/// List of mutable tree nodes. When querying for mutable children, this struct is returned.
+/// It holds a reference to the parent tree to ensure that the parent tree is not modified
+/// while the mutable references are held.
 pub struct TreeMutList<'node, 'tree: 'node, Node> {
     list: Vec<&'node mut TreeNode<Node>>,
     _parent: &'tree mut ShallowRefTree<Node>,

@@ -147,7 +147,7 @@ impl<'a> JobPlanner<'a> {
     }
 
     pub fn schedule_initial_job(&mut self, path: PathBuf) -> Option<NodeId> {
-        self.schedule_child(self.tree.root_id, BuildJobData::Initial(path))
+        self.schedule_child(self.tree.root_id(), BuildJobData::Initial(path))
     }
 
     pub fn schedule_child(&mut self, parent: NodeId, job: BuildJobData) -> Option<NodeId> {
@@ -333,7 +333,7 @@ impl<'a> JobPlanner<'a> {
                                         }
                                     };
                                 node.content = JobTreeData::Finished(result);
-                                self.scheduled_jobs.insert(self.tree.root_id);
+                                self.scheduled_jobs.insert(self.tree.root_id());
                                 return;
                             }
                         }
@@ -350,7 +350,7 @@ impl<'a> JobPlanner<'a> {
                             info,
                             hash: GeneralHash::NULL,
                         });
-                        self.scheduled_jobs.insert(self.tree.root_id);
+                        self.scheduled_jobs.insert(self.tree.root_id());
                     }
                 }
             }
@@ -442,7 +442,7 @@ impl<'a> JobPlanner<'a> {
                                         };
                                         current = self.tree.parent(node_id);
                                     }
-                                    self.scheduled_jobs.insert(self.tree.root_id);
+                                    self.scheduled_jobs.insert(self.tree.root_id());
                                     continue;
                                 }
 
@@ -489,7 +489,7 @@ impl<'a> JobPlanner<'a> {
                         trace!("- encountered root, checking exit condition");
                         let immediate_children = self
                             .tree
-                            .children_ref(self.tree.root_id)
+                            .children_ref(self.tree.root_id())
                             .unwrap_or_default();
                         let mut finished = true;
                         for child in immediate_children {

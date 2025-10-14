@@ -5,6 +5,7 @@ use backup_deduplicator::stages::clean::cmd::CleanSettings;
 use backup_deduplicator::stages::dedup::golden_model::cmd::{
     DedupGoldenModelSettings, MatchingModel,
 };
+use backup_deduplicator::stages::dedup::incremental_golden_model::cmd::DedupIncrementalGoldenModelSettings;
 use backup_deduplicator::stages::execute::cmd::{
     ExecuteAction, ExecuteActionType, ExecuteSettings,
 };
@@ -137,6 +138,9 @@ enum Command {
         /// When using the move action: The folder name to move duplicates to.
         #[arg(long = "move-folder", default_value = "__DEDUP__")]
         move_folder_name: String,
+        /// Ignore errors
+        #[arg(long)]
+        ignore_errors: bool,
         /// The root folders/files from the analysis
         #[arg()]
         files: Vec<String>,
@@ -170,6 +174,20 @@ enum DedupMode {
         matching_model: MatchingModel,
         /// The directories to delete files from.
         #[arg(short, long)]
+        directories: Vec<String>,
+    },
+    /// In incremental golden model mode, GoldenModel mode is executed several times.
+    /// 1. the last given directory serves as reference model for each other directory, 2. after that
+    /// the second last given directory serves as reference model for each previous directory (excluding the last)
+    /// 3. this is repeated until the first directory
+    ///
+    /// This mode is useful if having multiple backups of the same data that were taken at different times.
+    /// It is recommended to pass the directory in the sort order first=oldest to last=newest
+    IncrementalGoldenModel {
+        /// The matching model to use for deduplication.
+        #[arg(short, long, default_value = "plain")]
+        matching_model: MatchingModel,
+        /// The directories to delete files from.
         directories: Vec<String>,
     },
 }
@@ -486,6 +504,28 @@ fn main() {
                         }
                     }
                 }
+                DedupMode::IncrementalGoldenModel {
+                    directories,
+                    matching_model,
+                } => {
+                    match dedup::incremental_golden_model::cmd::run(
+                        DedupIncrementalGoldenModelSettings {
+                            input,
+                            output,
+                            matching_model,
+                            directories,
+                        },
+                    ) {
+                        Ok(_) => {
+                            info!("Dedup command completed successfully");
+                            std::process::exit(exitcode::OK);
+                        }
+                        Err(e) => {
+                            eprintln!("Error: {:?}", e);
+                            std::process::exit(exitcode::SOFTWARE);
+                        }
+                    }
+                }
             }
         }
         Command::Execute {
@@ -494,6 +534,7 @@ fn main() {
             dry_run,
             move_folder_name,
             input,
+            ignore_errors,
         } => {
             let input = utils::main::parse_path(
                 input.as_str(),
@@ -529,6 +570,7 @@ fn main() {
                 },
                 files,
                 input,
+                ignore_errors,
             }) {
                 Ok(_) => {
                     info!("Execute command completed successfully");

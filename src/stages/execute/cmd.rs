@@ -16,6 +16,8 @@ pub struct ExecuteSettings {
     pub dry_run: bool,
     /// The action to take when duplicates are found
     pub action: ExecuteAction,
+    /// Skip not found errors
+    pub ignore_errors: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,10 +92,17 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                 }
 
                 if !found {
-                    return Err(anyhow!(
-                        "Could not resolve path: {:?}. Please specify its parent folder.",
-                        action.path()
-                    ));
+                    if execute_settings.ignore_errors {
+                        warn!(
+                            "Could not resolve path: {:?}. Please specify its parent folder.",
+                            action.path()
+                        )
+                    } else {
+                        return Err(anyhow!(
+                            "Could not resolve path: {:?}. Please specify its parent folder.",
+                            action.path()
+                        ));
+                    }
                 }
             }
         }
@@ -158,7 +167,24 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                     }
                     Ok(metadata) => metadata,
                 };
-                children.count() as u64
+                children
+                    .filter(|x| {
+                        if let ExecuteAction::MoveDuplicates { folder_name } =
+                            &execute_settings.action
+                        {
+                            x.as_ref()
+                                .map(|x| {
+                                    x.path()
+                                        .file_name()
+                                        .map(|x| &x.to_string_lossy().to_string() == folder_name)
+                                        .unwrap_or(true)
+                                })
+                                .unwrap_or(true)
+                        } else {
+                            true
+                        }
+                    })
+                    .count() as u64
             } else {
                 metadata.len()
             };
@@ -240,6 +266,17 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                     if !move_folder.is_dir() {
                         error!("Path is not a folder: {:?}", move_folder);
                         continue;
+                    }
+
+                    let file_name = match resolved_path.file_name() {
+                        Some(file_name) => file_name,
+                        None => {
+                            error!("Unable to read file name for {resolved_path:?}");
+                            continue;
+                        }
+                    };
+                    if let Err(err) = fs::rename(resolved_path, move_folder.join(file_name)) {
+                        error!("Failed to move file: {:?} -> {:?}", resolved_path, err);
                     }
                 }
             }

@@ -1,7 +1,6 @@
 use log::{error, trace, warn};
 use std::fs;
 use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 
 pub fn run(source: PathBuf, target: PathBuf) {
@@ -52,8 +51,13 @@ pub fn run(source: PathBuf, target: PathBuf) {
             run(entry_path, target_path);
         }
 
-        if let Err(err) = File::open(&target).map(|dir| metadata.modified().map(|time| dir.set_modified(time))) {
-            warn!("Unable to set modification time for directory {:?}: {}", target, err);
+        if let Err(err) =
+            File::open(&target).map(|dir| metadata.modified().map(|time| dir.set_modified(time)))
+        {
+            warn!(
+                "Unable to set modification time for directory {:?}: {}",
+                target, err
+            );
         }
     } else {
         error!("{:?} Unknown file type", source);
