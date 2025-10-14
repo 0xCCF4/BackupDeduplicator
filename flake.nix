@@ -18,7 +18,6 @@
         {
           packages.default = naersk'.buildPackage {
             src = ./.;
-            gitAllRefs = true;
           };
         };
     };

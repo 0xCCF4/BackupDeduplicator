@@ -1,7 +1,7 @@
 use crate::stages::dedup::output::DeduplicationActions;
 use anyhow::{anyhow, Result};
 use log::{debug, error, warn};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -127,12 +127,20 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                 );
                 continue;
             }
-            untouchable_files.extend(
+            let mut queue = Vec::new();
+            queue.extend(
                 action
                     .remaining_duplicates()
                     .iter()
-                    .filter_map(|v| v.first_component()),
-            );
+                    .filter_map(|v| v.first_component().map(|x|x.clone())));
+
+            while let Some(item) = queue.pop() {
+                untouchable_files.push(item.clone());
+                if let Some(parent) = item.parent() {
+                    queue.push(parent.to_path_buf());
+                }
+            }
+
             if untouchable_files.contains(&resolved_path) {
                 error!(
                     "Tried to delete a file that was marked as untouchable: {:?}. Skipped!",
@@ -176,7 +184,7 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                                 .map(|x| {
                                     x.path()
                                         .file_name()
-                                        .map(|x| &x.to_string_lossy().to_string() == folder_name)
+                                        .map(|x| &x.to_string_lossy().to_string() != folder_name)
                                         .unwrap_or(true)
                                 })
                                 .unwrap_or(true)

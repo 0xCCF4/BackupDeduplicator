@@ -86,6 +86,10 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
         }
     }
 
+    for directory in dedup_settings.directories.iter() {
+        println!(" - {}", directory);
+    }
+
     let mut directories_matchers = directories_matchers
         .iter()
         .map(|m| m.as_ref().unwrap())
