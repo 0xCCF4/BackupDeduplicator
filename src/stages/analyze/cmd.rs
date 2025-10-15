@@ -185,7 +185,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     output_buf_writer.flush().expect("Unable to flush file");
 
     print!(
-        "There are {} GB of duplicated files",
+        "There are >{} GB of duplicated files",
         duplicated_bytes / 1024 / 1024 / 1024
     );
 

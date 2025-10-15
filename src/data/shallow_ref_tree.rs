@@ -12,7 +12,9 @@ static NODE_COUNTER: Mutex<NodeId> = Mutex::new(0);
 fn new_node_id() -> NodeId {
     let mut counter = NODE_COUNTER.lock().expect("Failed to lock job counter");
     *counter += 1;
-    *counter
+    let value = *counter;
+    drop(counter);
+    value
 }
 
 #[derive(Debug)]
@@ -300,10 +302,13 @@ impl<Node> ShallowRefTree<Node> {
     /// * `node` the node to remove
     pub fn remove_children<I: Into<NodeId>>(&mut self, node: I) {
         let mut remove_queue = VecDeque::new();
-        remove_queue.push_back(node.into());
+        let parent_node = node.into();
+        remove_queue.push_back(parent_node);
 
         while let Some(node_id) = remove_queue.pop_front() {
-            self.nodes.remove(&node_id);
+            if node_id != parent_node {
+                self.nodes.remove(&node_id);
+            }
             if let Some(children) = self.children(node_id) {
                 remove_queue.extend(children.into_iter());
             }
@@ -327,6 +332,7 @@ impl<Color: Display, Label: Display, Node: DebugGraph<Color = Color, Label = Lab
         writeln!(stream, "digraph tree {{")?;
 
         for (node_id, node) in self.nodes.iter() {
+            assert_eq!(*node_id, node.id, "ids must always be equal");
             let label = node
                 .content
                 .label()

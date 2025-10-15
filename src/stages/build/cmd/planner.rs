@@ -12,6 +12,7 @@ use itertools::Itertools;
 use log::{error, info, trace, warn};
 use std::collections::{hash_map, BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 
 #[derive(Debug)]
@@ -103,7 +104,7 @@ pub struct JobPlanner<'a> {
     cache: &'a mut HashMap<FilePath, HashTreeFileEntry>,
     result_sender: Sender<HashTreeFileEntry>,
 
-    _debug_dotfiles: u32,
+    _debug_dotfiles: AtomicU32,
 }
 
 pub enum ScheduleJobsResult {
@@ -142,7 +143,7 @@ impl<'a> JobPlanner<'a> {
             result_sender,
 
             pool: ThreadPool::new(args, worker_run),
-            _debug_dotfiles: 0,
+            _debug_dotfiles: 0.into(),
         }
     }
 
@@ -160,6 +161,8 @@ impl<'a> JobPlanner<'a> {
     }
 
     pub fn process_result(&mut self, result: JobResult) {
+        //self.debug_print_graph();
+
         match self.running_jobs.remove(&result.job_id) {
             Some(job) => job,
             None => {
@@ -361,13 +364,15 @@ impl<'a> JobPlanner<'a> {
         let jobs = std::mem::take(&mut self.scheduled_jobs);
 
         for node_id in jobs {
+            //self.debug_print_graph();
+
             let node = self.tree.node(node_id);
             if let Some(node) = node {
                 trace!("[SCHEDULE] {:?}", node);
                 match &node.content {
                     JobTreeData::BlockedByChildren { .. } => match self.tree.children_ref(node) {
                         None => {
-                            warn!("Encountered BLOCKED-BY-CHILDREN while no children were found")
+                            warn!("Encountered BLOCKED-BY-CHILDREN while no children were found: {:?}", node.content.path())
                         }
                         Some(children) => {
                             if children.iter().any(|child| {
@@ -574,6 +579,24 @@ impl<'a> JobPlanner<'a> {
                     return Err(("".into(), "Worker threads exited prematurely!".into()));
                 }
             }
+        }
+    }
+    pub fn debug_print_graph(&mut self) {
+        let current = self._debug_dotfiles.fetch_add(1, Ordering::Relaxed);
+
+        if current > 50 {
+            return;
+        }
+
+        let mut file = match std::fs::File::create(PathBuf::from("/tmp").join(format!("graph_{current}.dot")))  {
+            Ok(file) => file,
+            Err(err) => {
+                error!("Failed to open file for debug writing {err}");
+                return;
+            }
+        };
+        if let Err(err) = self.tree.to_dotfile(&mut file) {
+            error!("Failed to write debug graph {err}");
         }
     }
 }
