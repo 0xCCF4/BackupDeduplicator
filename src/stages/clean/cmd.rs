@@ -1,8 +1,10 @@
 use crate::hash::GeneralHashType;
-use crate::stages::build::output::{HashTreeFile, HashTreeFileEntryType};
+use crate::stages::build::output::{HashTreeFile, HashTreeFileEntry, HashTreeFileEntryType};
 use anyhow::{anyhow, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, trace, warn};
 use std::fs;
+use std::io::{BufRead, Seek, SeekFrom};
 use std::ops::Deref;
 use std::path::PathBuf;
 
@@ -58,6 +60,16 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
     let mut input_buf_reader = std::io::BufReader::new(&input_file);
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
+    let mut line_count = 0u64;
+    let mut line = String::new();
+    while let Ok(num) = input_buf_reader.read_line(&mut line) {
+        line_count += 1;
+        if num == 0 {
+            break;
+        }
+    }
+    input_buf_reader.seek(SeekFrom::Start(0))?;
+
     let mut save_file = HashTreeFile::new(
         &mut output_buf_writer,
         Some(&mut input_buf_reader),
@@ -69,45 +81,64 @@ pub fn run(clean_settings: CleanSettings) -> Result<()> {
     );
     save_file.load_header()?;
 
+    let pb = ProgressBar::new(line_count.saturating_sub(1u64));
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed}] [{wide_bar:.cyan/blue}] ({percent}%) ({eta})",
+        )
+        .unwrap()
+        .progress_chars("=>-"),
+    );
+
+    let mut counter = 0;
+
     // remove duplicates, remove deleted files
-    save_file.load_all_entries(|entry| match entry.path.resolve_file() {
-        Ok(path) => {
-            if clean_settings.no_fs {
-                return true;
-            }
+    while save_file
+        .load_entry(
+            |entry: &HashTreeFileEntry| match entry.path.resolve_file() {
+                Ok(path) => {
+                    if clean_settings.no_fs {
+                        return true;
+                    }
 
-            if !path.exists() {
-                return false;
-            }
+                    if !path.exists() {
+                        return false;
+                    }
 
-            let metadata = match clean_settings.follow_symlinks {
-                true => fs::metadata(path),
-                false => fs::symlink_metadata(path),
-            };
-            let metadata = match metadata {
-                Ok(data) => Some(data),
-                Err(err) => {
-                    warn!("Unable to read metadata of {:?}: {}", entry.path, err);
-                    None
+                    let metadata = match clean_settings.follow_symlinks {
+                        true => fs::metadata(path),
+                        false => fs::symlink_metadata(path),
+                    };
+                    let metadata = match metadata {
+                        Ok(data) => Some(data),
+                        Err(err) => {
+                            warn!("Unable to read metadata of {:?}: {}", entry.path, err);
+                            None
+                        }
+                    };
+
+                    if let Some(metadata) = metadata {
+                        return if metadata.is_symlink() {
+                            entry.file_type == HashTreeFileEntryType::Symlink
+                        } else if metadata.is_dir() {
+                            entry.file_type == HashTreeFileEntryType::Directory
+                        } else if metadata.is_file() {
+                            entry.file_type == HashTreeFileEntryType::File
+                        } else {
+                            entry.file_type == HashTreeFileEntryType::Other
+                        };
+                    }
+
+                    true
                 }
-            };
-
-            if let Some(metadata) = metadata {
-                return if metadata.is_symlink() {
-                    entry.file_type == HashTreeFileEntryType::Symlink
-                } else if metadata.is_dir() {
-                    entry.file_type == HashTreeFileEntryType::Directory
-                } else if metadata.is_file() {
-                    entry.file_type == HashTreeFileEntryType::File
-                } else {
-                    entry.file_type == HashTreeFileEntryType::Other
-                };
-            }
-
-            true
-        }
-        Err(_err) => true,
-    })?;
+                Err(_err) => true,
+            },
+        )?
+        .is_some()
+    {
+        counter += 1;
+        pb.set_position(counter);
+    }
 
     // todo filter files deleted from inside archives
 

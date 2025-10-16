@@ -5,6 +5,7 @@ use crate::stages::dedup::output::{
     DeduplicationAction, DeduplicationActionVersion, DeduplicationActions,
 };
 use anyhow::{anyhow, Result};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use itertools::Itertools;
 use log::{info, warn};
 use std::fs;
@@ -222,20 +223,39 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
 
     info!("Removing redundant actions");
 
-    let directory_removal_paths =  result.actions.iter().filter_map(|x| if let DeduplicationAction::RemoveDirectory {
-        path,..
-    }=x {Some(path)} else {None}).collect_vec();
+    let directory_removal_paths = result
+        .actions
+        .iter()
+        .filter_map(|x| {
+            if let DeduplicationAction::RemoveDirectory { path, .. } = x {
+                Some(path)
+            } else {
+                None
+            }
+        })
+        .collect_vec();
 
-    let mut filtered_output = result.actions.iter().filter(|entry| {
+    let pb = ProgressBar::new(result.actions.len() as u64);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed}] [{wide_bar:.cyan/blue}] ({percent}%) ({eta})",
+        )
+        .unwrap()
+        .progress_chars("=>-"),
+    );
+
+    let mut filtered_output = result.actions.iter().progress_with(pb).filter(|entry| {
         let mut path = match entry.path().first_component() {
             Some(x) => x.to_path_buf(),
             None => return false,
         };
         while let Some(parent) = path.parent() {
-            let found = directory_removal_paths.iter().any(|other| if let Some(other_path) = other.first_component() {
-                other_path == parent
-            } else {
-                false
+            let found = directory_removal_paths.iter().any(|other| {
+                if let Some(other_path) = other.first_component() {
+                    other_path == parent
+                } else {
+                    false
+                }
             });
 
             if found {

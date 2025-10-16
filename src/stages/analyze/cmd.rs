@@ -95,8 +95,6 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     let mut file_by_hash = save_file.file_by_hash;
     let mut all_files = save_file.all_entries;
 
-
-
     for (path, entry) in file_by_path.iter_mut() {
         file_by_path_marked.insert(
             path.clone(),
@@ -149,8 +147,7 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         let file = file_by_path.get(&entry.path).unwrap();
         let file = file.file.lock().unwrap();
         if let Some(file) = file.deref() {
-            duplicated_bytes +=
-                write_result_entry(file, &file_by_hash, &mut output_buf_writer);
+            duplicated_bytes += write_result_entry(file, &file_by_hash, &mut output_buf_writer);
         } else {
             error!("File not analyzed yet: {:?}", entry.path);
         }

@@ -37,6 +37,8 @@ rand = "0.8.5"
 regex = "1.10.5"
 event-listener = "5.4.1"
 itertools = "0.14.0"
+indicatif-log-bridge = "0.2.3"
+indicatif = "0.18.0"
 
 [features]
 hash-sha1 = ["dep:sha1"]

@@ -1,7 +1,9 @@
 use crate::stages::dedup::output::DeduplicationActions;
 use anyhow::{anyhow, Result};
+use indicatif::{ProgressBar, ProgressIterator, ProgressState, ProgressStyle};
 use log::{debug, error, warn};
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Write;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -110,7 +112,16 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
 
     debug!("Starting action phase...");
 
-    for action in &file.actions {
+    let pb = ProgressBar::new(file.actions.len() as u64);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed}] [{wide_bar:.cyan/blue}] ({percent}%) ({eta})",
+        )
+        .unwrap()
+        .progress_chars("=>-"),
+    );
+
+    for action in file.actions.iter().progress_with(pb) {
         if action.path().len() != 1 {
             warn!(
                 "Currently only non-archive files are supported: {:?}",
