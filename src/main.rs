@@ -181,6 +181,8 @@ enum DedupMode {
     /// the second last given directory serves as reference model for each previous directory (excluding the last)
     /// 3. this is repeated until the first directory
     ///
+    /// Folders from reference_models are considered for dedup purposes but not touched by the deduplicator
+    ///
     /// This mode is useful if having multiple backups of the same data that were taken at different times.
     /// It is recommended to pass the directory in the sort order first=oldest to last=newest
     IncrementalGoldenModel {
@@ -189,6 +191,9 @@ enum DedupMode {
         matching_model: MatchingModel,
         /// The directories to delete files from.
         directories: Vec<String>,
+        /// Other reference models
+        #[arg(short, long)]
+        reference_models: Vec<String>,
     },
 }
 
@@ -507,6 +512,7 @@ fn main() {
                 DedupMode::IncrementalGoldenModel {
                     directories,
                     matching_model,
+                    reference_models,
                 } => {
                     match dedup::incremental_golden_model::cmd::run(
                         DedupIncrementalGoldenModelSettings {
@@ -514,6 +520,7 @@ fn main() {
                             output,
                             matching_model,
                             directories,
+                            reference_models,
                         },
                     ) {
                         Ok(_) => {

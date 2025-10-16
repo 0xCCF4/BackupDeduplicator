@@ -132,7 +132,8 @@ pub fn run(execute_settings: ExecuteSettings) -> Result<()> {
                 action
                     .remaining_duplicates()
                     .iter()
-                    .filter_map(|v| v.first_component().map(|x|x.clone())));
+                    .filter_map(|v| v.first_component().map(|x| x.clone())),
+            );
 
             while let Some(item) = queue.pop() {
                 untouchable_files.push(item.clone());

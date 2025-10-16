@@ -588,13 +588,15 @@ impl<'a> JobPlanner<'a> {
             return;
         }
 
-        let mut file = match std::fs::File::create(PathBuf::from("/tmp").join(format!("graph_{current}.dot")))  {
-            Ok(file) => file,
-            Err(err) => {
-                error!("Failed to open file for debug writing {err}");
-                return;
-            }
-        };
+        let mut file =
+            match std::fs::File::create(PathBuf::from("/tmp").join(format!("graph_{current}.dot")))
+            {
+                Ok(file) => file,
+                Err(err) => {
+                    error!("Failed to open file for debug writing {err}");
+                    return;
+                }
+            };
         if let Err(err) = self.tree.to_dotfile(&mut file) {
             error!("Failed to write debug graph {err}");
         }

@@ -27,6 +27,8 @@ pub struct DedupIncrementalGoldenModelSettings {
     pub matching_model: MatchingModel,
     /// The incremental directories
     pub directories: Vec<String>,
+    /// Other reference folders
+    pub reference_models: Vec<String>,
 }
 
 /// Run the dedup command.
@@ -78,9 +80,26 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
         .map(|dir| Matcher::new(dedup_settings.matching_model, dir))
         .collect::<Vec<Result<Matcher>>>();
 
+    let reference_matchers = dedup_settings
+        .reference_models
+        .iter()
+        .map(|dir| Matcher::new(dedup_settings.matching_model, dir))
+        .collect::<Vec<Result<Matcher>>>();
+
     if let Some(err) = directories_matchers.iter().find(|m| m.is_err()) {
         if let Err(err) = err {
             return Err(anyhow!("This specified directory is invalid: {:?}", err));
+        } else {
+            unreachable!()
+        }
+    }
+
+    if let Some(err) = reference_matchers.iter().find(|m| m.is_err()) {
+        if let Err(err) = err {
+            return Err(anyhow!(
+                "This specified reference directory is invalid: {:?}",
+                err
+            ));
         } else {
             unreachable!()
         }
@@ -90,7 +109,12 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
         println!(" - {}", directory);
     }
 
-    let mut directories_matchers = directories_matchers
+    let directories_matchers = directories_matchers
+        .iter()
+        .map(|m| m.as_ref().unwrap())
+        .collect::<Vec<&Matcher>>();
+
+    let reference_matchers = reference_matchers
         .iter()
         .map(|m| m.as_ref().unwrap())
         .collect::<Vec<&Matcher>>();
@@ -101,12 +125,13 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
             .iter()
             .filter_map(|entry| {
                 if let Some(component) = entry.path.first_component() {
-                    directories_matchers
+                    let x = directories_matchers
                         .iter()
                         .enumerate()
                         .rev()
-                        .find_or_first(|(_, m)| m.matches(component.to_string_lossy().as_ref()))
-                        .map(|(index, _)| (entry, index))
+                        .find(|(_, m)| m.matches(component.to_string_lossy().as_ref()))
+                        .map(|(index, _)| (entry, index));
+                    x
                 } else {
                     None
                 }
@@ -115,10 +140,25 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
 
         relevant_conflicting_entries.sort_by_key(|(_, index)| *index);
 
-        let retain_file = match relevant_conflicting_entries.last() {
-            Some((file, _)) => *file,
-            None => continue,
-        };
+        let retain_file_in_bounce = relevant_conflicting_entries.last().map(|(entry, _)| *entry);
+
+        let reference_matched = entry
+            .conflicting
+            .iter()
+            .filter(|entry| {
+                if let Some(component) = entry.path.first_component() {
+                    reference_matchers
+                        .iter()
+                        .any(|m| m.matches(component.to_string_lossy().as_ref()))
+                } else {
+                    false
+                }
+            })
+            .collect::<Vec<&ConflictingEntry>>();
+
+        if retain_file_in_bounce.is_none() && reference_matched.is_empty() {
+            continue;
+        }
 
         let relevant_conflicting_entries = relevant_conflicting_entries
             .into_iter()
@@ -128,14 +168,23 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
         let remaining_other_duplicates = entry
             .conflicting
             .iter()
-            .filter(|p| !relevant_conflicting_entries.contains(p) || *p == retain_file)
+            .filter(|p| {
+                !relevant_conflicting_entries.contains(p)
+                    || if let Some(retain_file) = retain_file_in_bounce {
+                        *p == retain_file && reference_matched.is_empty()
+                    } else {
+                        false
+                    }
+            })
             .collect::<Vec<&ConflictingEntry>>();
 
         if !remaining_other_duplicates.is_empty() {
             // delete
             for file in relevant_conflicting_entries {
-                if file == retain_file {
-                    continue;
+                if let Some(retain_file) = retain_file_in_bounce {
+                    if file == retain_file {
+                        continue;
+                    }
                 }
                 match entry.ftype {
                     HashTreeFileEntryType::File | HashTreeFileEntryType::Symlink => {
