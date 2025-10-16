@@ -6,7 +6,7 @@ use crate::stages::dedup::output::{
 };
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
-use log::warn;
+use log::{info, warn};
 use std::fs;
 use std::path::PathBuf;
 
@@ -219,6 +219,35 @@ pub fn run(dedup_settings: DedupIncrementalGoldenModelSettings) -> Result<()> {
             }
         }
     }
+
+    info!("Removing redundant actions");
+
+    let directory_removal_paths =  result.actions.iter().filter_map(|x| if let DeduplicationAction::RemoveDirectory {
+        path,..
+    }=x {Some(path)} else {None}).collect_vec();
+
+    let mut filtered_output = result.actions.iter().filter(|entry| {
+        let mut path = match entry.path().first_component() {
+            Some(x) => x.to_path_buf(),
+            None => return false,
+        };
+        while let Some(parent) = path.parent() {
+            let found = directory_removal_paths.iter().any(|other| if let Some(other_path) = other.first_component() {
+                other_path == parent
+            } else {
+                false
+            });
+
+            if found {
+                return false;
+            }
+
+            path = parent.to_path_buf();
+        }
+
+        true
+    });
+    result.actions = filtered_output.cloned().collect_vec();
 
     let mut output_buf_writer = std::io::BufWriter::new(&output_file);
 
