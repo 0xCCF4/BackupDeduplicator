@@ -16,6 +16,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -94,6 +95,8 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
     let mut file_by_hash = save_file.file_by_hash;
     let mut all_files = save_file.all_entries;
 
+
+
     for (path, entry) in file_by_path.iter_mut() {
         file_by_path_marked.insert(
             path.clone(),
@@ -146,37 +149,8 @@ pub fn run(analysis_settings: AnalysisSettings) -> Result<()> {
         let file = file_by_path.get(&entry.path).unwrap();
         let file = file.file.lock().unwrap();
         if let Some(file) = file.deref() {
-            let parent = file.parent().lock().unwrap();
-            match parent.deref() {
-                Some(parent) => {
-                    // check if parent is also conflicting
-
-                    let parent = parent.upgrade().unwrap();
-                    let parent_hash = match parent.deref() {
-                        AnalysisFile::File(info) => Some(&info.content_hash),
-                        AnalysisFile::Directory(info) => Some(&info.content_hash),
-                        AnalysisFile::Symlink(info) => Some(&info.content_hash),
-                        AnalysisFile::Other(_) => None,
-                    };
-
-                    let parent_conflicting = match parent_hash {
-                        None => false,
-                        Some(parent_hash) => match file_by_hash.get(parent_hash) {
-                            Some(entries) => entries.len() >= 2,
-                            None => false,
-                        },
-                    };
-
-                    if !parent_conflicting {
-                        duplicated_bytes +=
-                            write_result_entry(file, &file_by_hash, &mut output_buf_writer);
-                    }
-                }
-                None => {
-                    duplicated_bytes +=
-                        write_result_entry(file, &file_by_hash, &mut output_buf_writer);
-                }
-            }
+            duplicated_bytes +=
+                write_result_entry(file, &file_by_hash, &mut output_buf_writer);
         } else {
             error!("File not analyzed yet: {:?}", entry.path);
         }
