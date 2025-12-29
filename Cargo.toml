@@ -21,7 +21,7 @@ log = "0.4.29"
 filetime = "0.2.26"
 exitcode = "1.1.2"
 serde = { version = "1.0.228", features = ["derive", "rc"] }
-serde_json = "1.0.146"
+serde_json = "1.0.148"
 num_cpus = "1.17.0"
 file-id = "0.2.3"
 xxhash-rust = { version = "0.8.15", features = ["xxh32", "xxh64"], optional = true }
