@@ -102,9 +102,9 @@ dependencies = [
 
 [[package]]
 name = "block-buffer"
-version = "0.11.0-rc.5"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9ef36a6fcdb072aa548f3da057640ec10859eb4e91ddf526ee648d50c76a949"
+checksum = "96eb4cdd6cf1b31d671e9efe75c5d1ec614776856cefbe109ca373554a6d514f"
 dependencies = [
  "hybrid-array",
 ]
@@ -208,9 +208,9 @@ dependencies = [
 
 [[package]]
 name = "crypto-common"
-version = "0.2.0-rc.5"
+version = "0.2.0-rc.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "919bd05924682a5480aec713596b9e2aabed3a0a6022fab6847f85a99e5f190a"
+checksum = "c7722afd27468475c9b6063dc03a57ef2ca833816981619f8ebe64d38d207eef"
 dependencies = [
  "hybrid-array",
 ]
@@ -227,13 +227,13 @@ dependencies = [
 
 [[package]]
 name = "digest"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea390c940e465846d64775e55e3115d5dc934acb953de6f6e6360bc232fe2bf7"
+checksum = "bff8de092798697546237a3a701e4174fe021579faec9b854379af9bf1e31962"
 dependencies = [
- "block-buffer 0.11.0-rc.5",
+ "block-buffer 0.11.0",
  "const-oid",
- "crypto-common 0.2.0-rc.5",
+ "crypto-common 0.2.0-rc.13",
 ]
 
 [[package]]
@@ -468,13 +468,13 @@ dependencies = [
 
 [[package]]
 name = "sha1"
-version = "0.11.0-rc.3"
+version = "0.11.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa1ae819b9870cadc959a052363de870944a1646932d274a4e270f64bf79e5ef"
+checksum = "9c777f0a122a53fddb0beb6e706771197000b8eb5c9f42b5b850f450ef48c788"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.4",
+ "digest 0.11.0-rc.9",
 ]
 
 [[package]]
